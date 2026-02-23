@@ -1,4 +1,4 @@
-from enum import Enum
+# from enum import Enum
 import gymnasium as gym
 from gymnasium import spaces
 # import pygame
@@ -27,18 +27,91 @@ class FleetReplacementEnv(gym.Env):
     
     def __init__(self, config: FleetConfig | None = None):
         super().__init__()
+
         self.config = config or FleetConfig()
-        n_vehicles = self.n_vehicles
-        max_vehicle_age = self.max_vehicle_age
-        max_mileage = self.max_mileage
+        self.current_step = 0
+        self.fleet_state: np.ndarray | None = None  # represent unitialized state, for guard in step()
+
+        # Unpack config calues
+        n_vehicles = self.config.n_vehicles
+        max_vehicle_age = self.config.max_vehicle_age
+        max_mileage = self.config.max_mileage
+        # annual_mileage = self.config.annual_mileage
+        # salvage_value_base = self.config.salvage_value_base
+        # salvage_depreciation = self.config.salvage_depreciation
+        # purchase_cost = self.config.purchase_cost
+        # fuel_cost_per_km = self.config.fuel_cost_per_km
+        # base_maintenance_cost = self.config.base_maintenance_cost
+        # maintenance_age_factor = self.config.maintenance_age_factor
+        # planning_horizon = self.config.planning_horizon
         
         # State space as box, matrix of shape (n_vehicles, 3 (technology, age, mileage))
         self.observation_space = spaces.Box(
-            low = np.zeros((n_vehicles, 3), dtype = np.float32),    # lower bound
-            high = np.array([[1, max_vehicle_age, max_mileage]] * n_vehicles, dtype = np.float32),
+            low = np.zeros((n_vehicles, 3), dtype = np.float32),                                        # lower bound
+            high = np.array([[1, max_vehicle_age, max_mileage]] * n_vehicles, dtype = np.float32),      # upper bound, 1 = BET
             dtype = np.float32
         )
 
         # Action space
-        self.action_space = spaces.MultiBinary(n_vehicles)      # simple for now, 0=keep, 1=replace with BET
+        self.action_space = spaces.MultiBinary(n_vehicles)              # simple for now, 0=keep, 1=replace with BET
         # self.action_space = spaces.MultiDiscrete([3] * n_vehicles)    # future alternative? 0=keep, 1=replace with DT, 2=replace with BET
+
+    # Construting observations
+    def _get_obs(self):
+        return self.fleet_state.copy()  # return copy of fleet state array
+    def _get_info(self):
+        return {
+            "step": self.current_step,
+            "mean_age": float(self.fleet_state[:, 1].mean()),
+            "mean_mileage": float(self.fleet_state[:, 2].mean()),
+        }
+    
+    # Reset function, starts new episode
+    def reset(self, seed: int | None = None, options: dict | None = None):
+        super().reset(seed=seed)
+        self.current_step = 0
+
+        ages = self.np_random.integers(0, 10, size=self.config.n_vehicles).astype(np.float32)      # generate random vehicle age, convert to float (as defined in obs space)
+        mileages = ages * self.config.annual_mileage                                               # starting mileage, derived from age                                            
+        technologies = np.zeros(self.config.n_vehicles, dtype=np.float32)                          # 0 = diesel, all DT
+
+        self.fleet_state = np.stack([technologies, ages, mileages], axis=1)            # combine aboce arrays to matrix of shape (n_vehicles, 3) to make columns parameters, rows vehicles
+        return self._get_obs(), self._get_info()
+    
+    # Step function
+    def step(self, action: np.ndarray):     # takes binary array from agent (1 = replace, 0 = keep, with n_vehicles length)
+        assert self.fleet_state is not None, "Call reset() before step()."
+        action = np.asarray(action, dtype=np.int32)
+        total_cost = 0.0    # initialize cost
+
+        for i in range(self.config.n_vehicles):
+            tech, age, mileage = self.fleet_state[i]    # unpack row i (vehicle i) into three variables
+            replace = bool(action[i])                   # convert binary action into true/false
+
+            # Forced replacement if limits exceeded (regardless of action)
+            # Returns true or false if one is true
+            force_replace = (
+                age + 1 >= self.config.max_vehicle_age
+                or mileage + self.config.annual_mileage >= self.config.max_mileage
+            )
+
+            # TO DO: ADD BRANCH FOR BET COST CALCULATION
+            if replace or force_replace:
+                salvage = self.config.salvage_value_base * (self.config.salvage_depreciation ** age)        # value of DT when sold
+                total_cost += self.config.purchase_cost - salvage                                           # cost of new truck
+                self.fleet_state[i] = [1.0, 0.0, 0.0]                                                       # brand-new BET
+            else:
+                fuel_cost = self.config.annual_mileage * self.config.fuel_cost_per_km
+                maintenance = self.config.base_maintenance_cost + self.config.maintenance_age_factor * age
+                total_cost += fuel_cost + maintenance
+                self.fleet_state[i] = [tech, age + 1, mileage + self.config.annual_mileage]
+
+        self.current_step += 1
+        reward = -total_cost    # agent's reward is negative cost
+        truncated = self.current_step >= self.config.planning_horizon
+        terminated = False  
+
+        return self._get_obs(), reward, terminated, truncated, self._get_info()
+    
+    def close(self):
+        pass
