@@ -24,13 +24,15 @@ class FleetConfig:
     salvage_depreciation: float = 0.85      # factor per year of truck age
 
 class FleetReplacementEnv(gym.Env):
-    
-    def __init__(self, config: FleetConfig | None = None):
+    metadata = {"render_modes": ["human"]}  # for rendering
+
+    def __init__(self, config: FleetConfig | None = None, render_mode: str | None = None):
         super().__init__()
 
         self.config = config or FleetConfig()
         self.current_step = 0
         self.fleet_state: np.ndarray | None = None  # represent unitialized state, for guard in step()
+        self.render_mode = render_mode              # for rendering
 
         # Unpack config calues
         n_vehicles = self.config.n_vehicles
@@ -111,7 +113,26 @@ class FleetReplacementEnv(gym.Env):
         truncated = self.current_step >= self.config.planning_horizon
         terminated = False  
 
+        # Rendering with declared mode
+        if self.render_mode == "human":
+            self._render_frame(action, total_cost)
+
         return self._get_obs(), reward, terminated, truncated, self._get_info()
+    
+    # Rendering method
+    def render(self):
+        if self.render_mode == "human":
+            self._render_frame()
+
+    def _render_frame(self, action=None, cost=None):
+        print(f"\n── Step {self.current_step} ──────────────────────────────")
+        print(f"{'#':<5} {'Tech':<8} {'Age':>5} {'Mileage':>10}  Action")
+        for i, (tech, age, km) in enumerate(self.fleet_state):
+            act = "REPLACE" if (action is not None and action[i]) else "keep"
+            print(f"{i:<5} {'Diesel' if tech == 0 else 'BEV':<8} {int(age):>5} {int(km):>10}  {act}")
+        if cost is not None:
+            print(f"\nTotal cost: €{cost:>12,.0f}   Reward: €{-cost:>12,.0f}")
+
     
     def close(self):
         pass

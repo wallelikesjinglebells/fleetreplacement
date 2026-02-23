@@ -1,7 +1,7 @@
 from gymnasium.utils.env_checker import check_env
 from fleetreplacement_env.envs.fleet_replacement import FleetReplacementEnv
 
-env = FleetReplacementEnv()
+env = FleetReplacementEnv(render_mode="human")
 check_env(env)
 print("✓ check_env passed")
 
