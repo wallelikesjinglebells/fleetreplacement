@@ -1,9 +1,14 @@
 from gymnasium.utils.env_checker import check_env
 from fleetreplacement_env.envs.fleet_replacement import FleetReplacementEnv
 
+# Validation without rendering
+env = FleetReplacementEnv()
+check_env(env, warn=True)
+env.close()
+print("✓ check_env passed\n")
+
+# Demonstrate training episode
 env = FleetReplacementEnv(render_mode="human")
-check_env(env)
-print("✓ check_env passed")
 
 obs, info = env.reset(seed=42)
 print(f"Initial observation shape: {obs.shape}")
@@ -13,7 +18,7 @@ total_reward = 0.0
 done = False
 
 while not done:
-    action = env.action_space.sample()
+    action = env.action_space.sample()      # random policy
     obs, reward, terminated, truncated, info = env.step(action)
     total_reward += reward
     done = terminated or truncated
