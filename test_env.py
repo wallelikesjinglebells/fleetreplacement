@@ -1,16 +1,18 @@
+import gymnasium as gym
+import fleetreplacement_env
 from gymnasium.utils.env_checker import check_env
-from fleetreplacement_env.envs.fleet_replacement import FleetReplacementEnv
+# from fleetreplacement_env.envs.fleet_replacement import FleetReplacementEnv
 
 # Validation without rendering
-env = FleetReplacementEnv()
-check_env(env, warn=True)
+env = gym.make("FleetReplacement-v0")
+check_env(env.unwrapped, warn=True)     # gym.make() wraps env in TimeLimit wrapper
 env.close()
 print("✓ check_env passed\n")
 
 # Demonstrate training episode
-env = FleetReplacementEnv(render_mode="human")
-
+env = gym.make("FleetReplacement-v0", render_mode="human")
 obs, info = env.reset(seed=42)
+
 print(f"Initial observation shape: {obs.shape}")
 print(f"Initial fleet state:\n{obs}")
 
