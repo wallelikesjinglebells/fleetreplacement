@@ -1,0 +1,12 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Training logs (TensorBoard event files, Monitor wrapper)
+logs/PPO_*/
+logs/evaluations.npz
+logs/eval_monitor.monitor.csv
+
+# Trained model weights
+models/
+*.zip
