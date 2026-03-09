@@ -4,6 +4,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.callbacks import ProgressBarCallback
 
 # Configuration variables, tunable settings
 ENV_ID        = "FleetReplacement-v0"
@@ -43,7 +44,7 @@ model = PPO(
 )
 
 # Train
-model.learn(total_timesteps=TOTAL_STEPS, callback=eval_callback)
+model.learn(total_timesteps=TOTAL_STEPS, callback=eval_callback, progress_bar=True)
 
 # Save final model at end of training
 model.save(f"{SAVE_PATH}_final")
