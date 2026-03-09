@@ -50,14 +50,8 @@ class FleetReplacementEnv(gym.Env):
         # State space as box, matrix of shape (n_vehicles, 3 (technology, age, mileage))
         # After including current_step in state space: vector with n_vehicles*3+1 elements
         self.observation_space = spaces.Box(
-            low = np.append(                                                                         # lower bound
-                np.zeros((n_vehicles* 3), dtype = np.float32),
-                np.float32(0.0)                                                                      # current_step lower bound
-            ),                                                                                          
-            high = np.append(
-                np.array([1, max_vehicle_age, max_mileage] * n_vehicles, dtype = np.float32),        # upper bound, 1 = BET
-                np.float32(planning_horizon)                                                         # current_step upper bound
-            ),
+            low  = np.zeros(n_vehicles * 3 + 1, dtype=np.float32),                                                                                
+            high = np.ones( n_vehicles * 3 + 1, dtype=np.float32),
             dtype = np.float32
         )
 
@@ -65,10 +59,13 @@ class FleetReplacementEnv(gym.Env):
         self.action_space = spaces.MultiBinary(n_vehicles)              # simple for now, 0=keep, 1=replace with BET
         # self.action_space = spaces.MultiDiscrete([3] * n_vehicles)    # future alternative? 0=keep, 1=replace with DT, 2=replace with BET
 
-    # Construting observations
+    # Construting observations for NN
     def _get_obs(self):
-        flat_fleet = self.fleet_state.flatten()
-        step_feature = np.array([float(self.current_step)], dtype = np.float32)
+        tech = self.fleet_state[:, 0]
+        age = self.fleet_state[:, 1] / self.config.max_vehicle_age                                          # normalize
+        mileage = self.fleet_state[:, 2] / self.config.max_mileage                                          # normalize
+        flat_fleet = np.stack([tech, age, mileage], axis=1).flatten().astype(np.float32)        
+        step_feature = np.array([self.current_step / self.config.planning_horizon], dtype=np.float32)       # normalize
         return np.concatenate([flat_fleet, step_feature])
     def _get_info(self):
         return {
