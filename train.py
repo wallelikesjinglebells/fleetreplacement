@@ -8,7 +8,7 @@ from stable_baselines3.common.callbacks import ProgressBarCallback
 
 # Configuration variables, tunable settings
 ENV_ID        = "FleetReplacement-v0"
-TOTAL_STEPS   = 200_000   # total number of environment steps to train (increase for real training)
+TOTAL_STEPS   = 1_500_000   # total number of environment steps to train (increase for real training)
 N_ENVS        = 4         # parallel environments for faster data collection
 EVAL_FREQ     = 10_000    # pause training every EVAL_FREQ steps to evaluate current policy on eval_env
 LOG_DIR       = "./logs/"
@@ -46,6 +46,7 @@ model = PPO(
 
 # Train
 model.learn(total_timesteps=TOTAL_STEPS, callback=eval_callback, progress_bar=True)
+model = PPO.load(f"{SAVE_PATH}/best_model")                                             # reload best model
 
 # Save final model at end of training
 model.save(f"{SAVE_PATH}_final")
@@ -53,7 +54,8 @@ print(f"Training complete. Model saved to {SAVE_PATH}_final")
 
 # Sanity check :) run one full episode with trained policy
 env = gym.make(ENV_ID, render_mode="human")
-obs, info = env.reset(seed=0)
+# obs, info = env.reset(seed=0)                                 # uncomment if fleet should stay the same
+obs, info = env.reset()                                         # random fleet composition
 done = False
 total_reward = 0.0
 
