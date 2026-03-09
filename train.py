@@ -3,6 +3,7 @@ import gymnasium as gym
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import EvalCallback
+from stable_baselines3.common.monitor import Monitor
 
 # Configuration variables, tunable settings
 ENV_ID        = "FleetReplacement-v0"
@@ -16,7 +17,7 @@ SAVE_PATH     = "./models/ppo_fleet"
 vec_env = make_vec_env(ENV_ID, n_envs=N_ENVS)
 
 # Single evaluation environment
-eval_env = gym.make(ENV_ID)
+eval_env = Monitor(gym.make(ENV_ID), filename="./logs/eval_monitor")        # Monitor wrapper to fix warning if other wrappers are present
 
 # Callback: every EVAL_FREQ, run current policy on eval_env, record mean reward, if better than previous best 
 eval_callback = EvalCallback(
