@@ -134,7 +134,7 @@ class FleetReplacementEnv(gym.Env):
         print(f"\n── Step {self.current_step} ──────────────────────────────")
         print(f"{'#':<5} {'Tech':<8} {'Age':>5} {'Mileage':>10}  Action")
         for i, (tech, age, km) in enumerate(self.fleet_state):
-            act = "REPLACE" if (action is not None and action[i]) else "keep"
+            act = "REPLACED" if (action is not None and action[i]) else "kept"
             print(f"{i:<5} {'DT' if tech == 0 else 'BET':<8} {int(age):>5} {int(km):>10}  {act}")
         if cost is not None:
             print(f"\nTotal cost: €{cost:>12,.0f}   Reward: €{-cost:>12,.0f}")
