@@ -24,7 +24,7 @@ class FleetConfig:
     salvage_depreciation: float = 0.85      # factor per year of truck age
 
 class FleetReplacementEnv(gym.Env):
-    metadata = {"render_modes": ["human"], "render_fps": 1}  # for rendering
+    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 1}  # for rendering
 
     def __init__(self, config: FleetConfig | None = None, render_mode: str | None = None):
         super().__init__()
@@ -45,12 +45,19 @@ class FleetReplacementEnv(gym.Env):
         # fuel_cost_per_km = self.config.fuel_cost_per_km
         # base_maintenance_cost = self.config.base_maintenance_cost
         # maintenance_age_factor = self.config.maintenance_age_factor
-        # planning_horizon = self.config.planning_horizon
+        planning_horizon = self.config.planning_horizon
         
         # State space as box, matrix of shape (n_vehicles, 3 (technology, age, mileage))
+        # After including current_step in state space: vector with n_vehicles*3+1 elements
         self.observation_space = spaces.Box(
-            low = np.zeros((n_vehicles, 3), dtype = np.float32),                                        # lower bound
-            high = np.array([[1, max_vehicle_age, max_mileage]] * n_vehicles, dtype = np.float32),      # upper bound, 1 = BET
+            low = np.append(                                                                         # lower bound
+                np.zeros((n_vehicles* 3), dtype = np.float32),
+                np.float32(0.0)                                                                      # current_step lower bound
+            ),                                                                                          
+            high = np.append(
+                np.array([1, max_vehicle_age, max_mileage] * n_vehicles, dtype = np.float32),        # upper bound, 1 = BET
+                np.float32(planning_horizon)                                                         # current_step upper bound
+            ),
             dtype = np.float32
         )
 
@@ -60,7 +67,9 @@ class FleetReplacementEnv(gym.Env):
 
     # Construting observations
     def _get_obs(self):
-        return self.fleet_state.copy()  # return copy of fleet state array
+        flat_fleet = self.fleet_state.flatten()
+        step_feature = np.array([float(self.current_step)], dtype = np.float32)
+        return np.concatenate([flat_fleet, step_feature])
     def _get_info(self):
         return {
             "step": self.current_step,
@@ -77,7 +86,7 @@ class FleetReplacementEnv(gym.Env):
         mileages = ages * self.config.annual_mileage                                               # starting mileage, derived from age                                            
         technologies = np.zeros(self.config.n_vehicles, dtype=np.float32)                          # 0 = diesel, all DT
 
-        self.fleet_state = np.stack([technologies, ages, mileages], axis=1)            # combine aboce arrays to matrix of shape (n_vehicles, 3) to make columns parameters, rows vehicles
+        self.fleet_state = np.stack([technologies, ages, mileages], axis=1)            # combine above arrays to matrix of shape (n_vehicles, 3) to make columns parameters, rows vehicles
         return self._get_obs(), self._get_info()
     
     # Step function
