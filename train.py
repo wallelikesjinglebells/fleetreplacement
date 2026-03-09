@@ -26,7 +26,7 @@ eval_callback = EvalCallback(
     best_model_save_path=SAVE_PATH,
     log_path=LOG_DIR,
     eval_freq=max(EVAL_FREQ // N_ENVS, 1),      # SB3 counts steps per individual environment → divide EVAL_FREQ by no. of environments
-    deterministic=True,
+    deterministic=True,                         # greedy, pick action with highest probability instead of sampling (like in training)
     render=False,
 )
 
