@@ -41,6 +41,7 @@ model = PPO(
     n_epochs=10,
     gamma=0.99,
     tensorboard_log=LOG_DIR,
+    ent_coef=0.01,          # entropy coefficient for loss calculation (PPO is rewarded for exploring all actions)
 )
 
 # Train
