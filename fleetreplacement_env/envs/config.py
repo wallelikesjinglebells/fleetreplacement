@@ -9,7 +9,6 @@ class MDPConfig:
     max_vehicle_age: int = 20       # max truck age in years before forced retirement
     max_mileage: int = 500_000      # max truck mileage in km before forced retirement
     planning_horizon: int = 10      # planning time horizon in years (when is one training episode over?)
-    annual_mileage: int = 50_000    # one vehicle's annual mileage in km
 
 # Cost parameters for costs.py
 @dataclass
@@ -43,7 +42,7 @@ class CostConfig:
     consumption_bet: float      # consumption kWh/100km
 
     # shared params
-    akt_base: float             # Clara: annual km for long-haul
+    akt_base: float             # Clara: annual km for long-haul, no longer in MDPConfig (SSOT here)
     avg_speed: float
     # wage_factor: float        # is 1, omitted
 
@@ -88,13 +87,6 @@ class CostConfig:
     residual_ict_perc: float
     residual_bet_truck_perc: float
     residual_bat_perc: float
-
-    purchase_cost_dt: float   
-    purchase_cost_bet: float
-    consumption_ict: float
-    consumption_bet: float
-    residual_perc_dt: float
-    residual_perc_bet: float
 
 # Composition
 @dataclass
