@@ -88,6 +88,11 @@ class CostConfig:
     residual_bet_truck_perc: float
     residual_bat_perc: float
 
+    # Omitted
+    # ee_energy_factor: float     # only activates for automated truck with EE in name
+    # ro_energy_factor: float     # only activates for automated truck with RO in name            
+    # ro_price_kwh_factor: float  # only activates for automated truck with RO in name
+
 # Composition
 @dataclass
 class FleetEnvConfig:
