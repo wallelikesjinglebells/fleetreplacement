@@ -1,0 +1,9 @@
+name;diesel_price;energy_price;toll_ict;toll_bet;driver_wage;tax;maint_km;tire_km;insurance_base;subsidy_type;subsidy_data
+Germany;1,66;0,399;0,348;0;27;929;0,027;0,0713;3050;percentage_of_diff;{'percentage': 0.6, 'max_amount': 300000}
+Italy;1,67;0,399;0,1903;0,1903;30,78;1509;0,0443;0,0259;3850;fixed;{'amount': 24000}
+France;1,67;0,339;0,3401;0,3197;36,27;516;0,0983;0,034;2481;percentage_of_diff;{'percentage': 0.5, 'max_amount': 90000}
+Sweden;1,6;0,3378;1325,8885;331,9781;41,57;929;0,0617;0,0625;4000;none;{}
+Poland;1,47;0,399;0,42;0,42;11,91;1303;0,037;0,0288;2530;by_size;{'large': {'perc': 0.3, 'max': 167852.83}, 'medium': {'perc': 0.5, 'max': 167852.83}, 'small': {'perc': 0.6, 'max': 167852.83}}
+Netherlands;1,74;0,399;0,201;0,038;34,88;840;0,0618;0,0242;3000;by_size;{'large': {'perc': 0.111, 'max': 43900}, 'medium': {'perc': 0.21, 'max': 83200}, 'small': {'perc': 0.29, 'max': 115200}}
+Spain;1,45;0,339;0,21;0,21;20,99;601;0,046;0,0225;2270;fixed;{'amount': 30000}
+Czechia;1,4;0,399;0,2378;0,1884;20,99;1718;0,0431;0,0355;2800;by_size;{'large': {'perc': 0.30, 'max': 48000}, 'medium': {'perc': 0.40, 'max': 72000}, 'small': {'perc': 0.50, 'max': 96000}}
