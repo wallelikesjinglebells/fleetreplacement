@@ -99,6 +99,8 @@ class FleetReplacementEnv(gym.Env):
         action = np.asarray(action, dtype=np.int32)
         total_cost = 0.0    # initialize cost
 
+        resolved_action = np.empty(self.config.n_vehicles, dtype=np.int32)      # initializes array to store actual action (override or agent)
+
         for i in range(self.config.n_vehicles):
             tech, age, mileage = self.fleet_state[i]    # unpack row i (vehicle i) into three variables
             # replace = bool(action[i])                   # convert binary action into true/false
@@ -114,6 +116,8 @@ class FleetReplacementEnv(gym.Env):
             # If agent says no replacement, but force_replace is true, default to replace with DT
             if force_replace and act == 0:
                 act = 1
+
+            resolved_action[i] = act
 
             # Replace with DT
             if act == 1:
@@ -144,7 +148,7 @@ class FleetReplacementEnv(gym.Env):
 
         # Rendering with declared mode
         if self.render_mode == "human":
-            self._render_frame(action, total_cost)
+            self._render_frame(resolved_action, total_cost)
 
         return self._get_obs(), reward, terminated, truncated, self._get_info()
     
