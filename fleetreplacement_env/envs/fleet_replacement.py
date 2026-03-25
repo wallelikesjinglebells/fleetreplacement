@@ -1,10 +1,8 @@
-# from enum import Enum
 import gymnasium as gym
 from gymnasium import spaces
-# import pygame
 import numpy as np
-# from dataclasses import dataclass
 from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config
+from fleetreplacement_env.envs.costs import compute_step_cost
 
 class FleetReplacementEnv(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 1}  # for rendering
@@ -26,8 +24,6 @@ class FleetReplacementEnv(gym.Env):
 
         # Unpack config calues
         n_vehicles = self.cfg.mdp.n_vehicles
-        max_vehicle_age = self.cfg.mdp.max_vehicle_age
-        max_mileage = self.cfg.mdp.max_mileage
         
         # State space as box, matrix of shape (n_vehicles, 3 (technology, age, mileage))
         # After including current_step in state space: vector with n_vehicles*3+1 elements
@@ -38,8 +34,7 @@ class FleetReplacementEnv(gym.Env):
         )
 
         # Action space
-        # self.action_space = spaces.MultiBinary(n_vehicles)              # simple for now, 0=keep, 1=replace with BET
-        self.action_space = spaces.MultiDiscrete([3] * n_vehicles)        # 0=keep, 1=replace with DT, 2=replace with BET
+        self.action_space = spaces.MultiDiscrete([3] * n_vehicles)        # 0=keep, 1=replace with ICT, 2=replace with BET
 
     # Constructing observations for NN
     def _get_obs(self):
@@ -56,7 +51,7 @@ class FleetReplacementEnv(gym.Env):
             "mean_age": float(self.fleet_state[:, 1].mean()),
             "mean_mileage": float(self.fleet_state[:, 2].mean()),
             "n_bet": int((self.fleet_state[:, 0] == 1).sum()),
-            "n_dt":  int((self.fleet_state[:, 0] == 0).sum()),
+            "n_ict":  int((self.fleet_state[:, 0] == 0).sum()),
         }
     
     # Reset function, starts new episode
@@ -66,7 +61,7 @@ class FleetReplacementEnv(gym.Env):
 
         ages = self.np_random.integers(0, 10, size=self.cfg.mdp.n_vehicles).astype(np.float32)      # generate random vehicle age, convert to float (as defined in obs space)
         mileages = ages * self.cfg.cost.akt_base                                         # starting mileage, derived from age                                            
-        technologies = np.zeros(self.cfg.mdp.n_vehicles, dtype=np.float32)                          # 0 = diesel, all DT
+        technologies = np.zeros(self.cfg.mdp.n_vehicles, dtype=np.float32)                          # 0 = diesel, all ICT
 
         self.fleet_state = np.stack([technologies, ages, mileages], axis=1)            # combine above arrays to matrix of shape (n_vehicles, 3) to make columns parameters, rows vehicles
 
@@ -86,7 +81,7 @@ class FleetReplacementEnv(gym.Env):
         for i in range(self.cfg.mdp.n_vehicles):
             tech, age, mileage = self.fleet_state[i]    # unpack row i (vehicle i) into three variables
             # replace = bool(action[i])                   # convert binary action into true/false
-            act = int(action[i])                        # assign value of replacement to act (0 = keep, 1 = replace with DT, 2 = replace with BET)
+            act = int(action[i])                        # assign value of replacement to act (0 = keep, 1 = replace with ICT, 2 = replace with BET)
 
             # Forced replacement if limits exceeded (regardless of action)
             # Returns true or false if one is true
@@ -95,33 +90,28 @@ class FleetReplacementEnv(gym.Env):
                 or mileage + self.cfg.cost.akt_base >= self.cfg.mdp.max_mileage
             )
 
-            # If agent says no replacement, but force_replace is true, default to replace with DT
+            # If agent says no replacement, but force_replace is true, default to replace with ICT
             if force_replace and act == 0:
                 act = 1
 
             resolved_action[i] = act
 
-            # Replace with DT
-            if act == 1:
-                salvage = self.cfg.mdp.salvage_value_base * (self.cfg.mdp.salvage_depreciation ** age)
-                total_cost += self.cfg.mdp.purchase_cost_dt - salvage
-                self.fleet_state[i] = [0.0, 0.0, 0.0]
+            # Calculate cost by calling compute_step_cost in costs.py
+            cost_item = compute_step_cost(
+                tech=int(tech),
+                age=age,
+                action=act,
+                annual_km=self.cfg.cost.akt_base,
+                cfg=self.cfg.cost,
+            )
+            total_cost += cost_item.total
 
-            # Replace with BET
-            elif act == 2:
-                salvage = self.cfg.mdp.salvage_value_base * (self.cfg.mdp.salvage_depreciation ** age)
-                total_cost += self.cfg.mdp.purchase_cost_bet - salvage
-                self.fleet_state[i] = [1.0, 0.0, 0.0]
-
-            # Keep
-            else:
-                maintenance = self.cfg.mdp.base_maintenance_cost + self.cfg.mdp.maintenance_age_factor * age
-                if tech == 0.0:     # keep DT
-                    running_cost = self.cfg.cost.akt_base * self.cfg.mdp.fuel_cost_per_km
-                else:               # keep BET
-                    running_cost = self.cfg.cost.akt_base * self.cfg.mdp.electricity_cost_per_km
-                total_cost += running_cost + maintenance
+            # Update fleet state after cost is computed
+            if act == 0:  # keep
                 self.fleet_state[i] = [tech, age + 1, mileage + self.cfg.cost.akt_base]
+            else:         # replace with ICT (act=1) or BET (act=2)
+                new_tech = 0.0 if act == 1 else 1.0
+                self.fleet_state[i] = [new_tech, 0.0, 0.0]      # assupmtion: new vehicle does not operate in the year of purchase in this model
 
         self.current_step += 1
         reward = -total_cost    # agent's reward is negative cost
@@ -140,12 +130,12 @@ class FleetReplacementEnv(gym.Env):
             self._render_frame()
 
     def _render_frame(self, action=None, cost=None):
-        act_labels = {0: "kept", 1: "→ DT", 2: "→ BET"}
+        act_labels = {0: "kept", 1: "→ ICT", 2: "→ BET"}
         print(f"\n── Step {self.current_step} ──────────────────────────────")
         print(f"{'#':<5} {'Tech':<8} {'Age':>5} {'Mileage':>10}  Action")
         for i, (tech, age, km) in enumerate(self.fleet_state):
             act = act_labels.get(int(action[i]), "-") if action is not None else "-"
-            print(f"{i:<5} {'DT' if tech == 0 else 'BET':<8} {int(age):>5} {int(km):>10}  {act}")
+            print(f"{i:<5} {'ICT' if tech == 0 else 'BET':<8} {int(age):>5} {int(km):>10}  {act}")
         if cost is not None:
             print(f"\nTotal cost: €{cost:>12,.0f}   Reward: €{-cost:>12,.0f}")
 
