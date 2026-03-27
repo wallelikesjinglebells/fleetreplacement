@@ -40,7 +40,8 @@ class FleetReplacementEnv(gym.Env):
     def _get_obs(self):
         tech = self.fleet_state[:, 0]
         age = self.fleet_state[:, 1] / self.cfg.mdp.max_vehicle_age                                          # normalize
-        mileage = self.fleet_state[:, 2] / self.cfg.mdp.max_mileage                                          # normalize
+        # mileage = self.fleet_state[:, 2] / self.cfg.mdp.max_mileage 
+        mileage = self.fleet_state[:, 2] / self.cfg.cost.max_lifetime_km                                         # normalize
         flat_fleet = np.stack([tech, age, mileage], axis=1).flatten().astype(np.float32)        
         step_feature = np.array([self.current_step / self.cfg.mdp.planning_horizon], dtype=np.float32)       # normalize
         return np.concatenate([flat_fleet, step_feature])
@@ -60,7 +61,11 @@ class FleetReplacementEnv(gym.Env):
         self.current_step = 0
 
         ages = self.np_random.integers(1, 10, size=self.cfg.mdp.n_vehicles).astype(np.float32)      # generate random vehicle age, convert to float (as defined in obs space)
-        mileages = ages * self.cfg.cost.akt_base                                         # starting mileage, derived from age                                            
+        # mileages = ages * self.cfg.cost.akt_base                                         # starting mileage, derived from age       
+        mileages = np.minimum(                                    
+            ages * self.cfg.cost.akt_base,
+            self.cfg.cost.max_lifetime_km - self.cfg.cost.akt_base
+        )                                     
         technologies = np.zeros(self.cfg.mdp.n_vehicles, dtype=np.float32)                          # 0 = diesel, all ICT
 
         self.fleet_state = np.stack([technologies, ages, mileages], axis=1)            # combine above arrays to matrix of shape (n_vehicles, 3) to make columns parameters, rows vehicles
@@ -87,7 +92,8 @@ class FleetReplacementEnv(gym.Env):
             # Returns true or false if one is true
             force_replace = (
                 age + 1 >= self.cfg.mdp.max_vehicle_age
-                or mileage + self.cfg.cost.akt_base >= self.cfg.mdp.max_mileage
+                # or mileage + self.cfg.cost.akt_base >= self.cfg.mdp.max_mileage
+                or mileage + self.cfg.cost.akt_base >= self.cfg.cost.max_lifetime_km
             )
 
             # If agent says no replacement, but force_replace is true, default to replace with ICT

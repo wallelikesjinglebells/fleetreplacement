@@ -11,7 +11,7 @@ class MDPConfig:
     # MDP parameters with default values
     n_vehicles: int = 10            # fleet size
     max_vehicle_age: int = 20       # max truck age in years before forced retirement
-    max_mileage: int = 1_500_000      # max truck mileage in km before forced retirement
+    # max_mileage: int = 1_500_000      # max truck mileage in km before forced retirement
     planning_horizon: int = 10      # planning time horizon in years (when is one training episode over?)
 
 # Cost parameters for costs.py
