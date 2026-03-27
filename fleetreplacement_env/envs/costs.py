@@ -134,18 +134,19 @@ def _market_value(
     Geometric-degressive depreciation (Winkelmann)
     """
     n = max(cfg.n_years, 1.0)
+    age_eff = age + 1     # new vehicle immediately has value of 1-year-old vehicle
 
     # ICT
     if tech == 0:
         capex = _capex_ict_gross(cfg, ps)
-        val = capex * (cfg.residual_ict_perc ** (age / n))
+        val = capex * (cfg.residual_ict_perc ** (age_eff / n))
         return max(0.0, val)                                    # prevent negative values if a vehicle is held past its assumed lifetime
 
     else:  # BET: separate depreciation for truck body and battery
         capex_truck = _capex_bet_truck_gross(cfg, ps)
         capex_bat = _battery_cost(cfg, ps)
-        val_truck = capex_truck * (cfg.residual_bet_truck_perc ** (age / n))
-        val_bat = capex_bat * (cfg.residual_bat_perc ** (age / n))
+        val_truck = capex_truck * (cfg.residual_bet_truck_perc ** (age_eff / n))
+        val_bat = capex_bat * (cfg.residual_bat_perc ** (age_eff / n))
         return max(0.0, val_truck + val_bat)
     
 
@@ -172,7 +173,7 @@ def compute_replacement_cost(
     new_tech: int,
     old_tech: int,
     old_age: float,
-    # annual_km: float,
+    annual_km: float,
     cfg: CostConfig,
     ps: Optional[PriceState] = None,
 ) -> StepCost:
@@ -188,9 +189,6 @@ def compute_replacement_cost(
 
     Returns
     StepCost 
-    
-    with CAPEX fields populated, OPEX fields are zero
-    (The new vehicle does not operate in the year of purchase in this model)
     """
     cost = StepCost()
 
@@ -206,15 +204,15 @@ def compute_replacement_cost(
 
     cost.salvage_revenue = _market_value(old_tech, old_age, cfg, ps)    # Winkelmann: eq. (15), age-dependent sales price is accounted for in state cost calculation
 
-    # # OPEX !=0 for new vehicle in replacement year
-    # opex = compute_opex(tech=new_tech, annual_km=annual_km, cfg=cfg, ps=ps)
-    # cost.fuel_energy = opex.fuel_energy
-    # cost.toll = opex.toll
-    # cost.maintenance = opex.maintenance
-    # cost.tires = opex.tires
-    # cost.driver = opex.driver
-    # cost.insurance = opex.insurance
-    # cost.tax = opex.tax
+    # OPEX !=0 for new vehicle in replacement year
+    opex = compute_opex(tech=new_tech, annual_km=annual_km, cfg=cfg, ps=ps)
+    cost.fuel_energy = opex.fuel_energy
+    cost.toll = opex.toll
+    cost.maintenance = opex.maintenance
+    cost.tires = opex.tires
+    cost.driver = opex.driver
+    cost.insurance = opex.insurance
+    cost.tax = opex.tax
 
     return cost
 
@@ -306,9 +304,9 @@ def compute_step_cost(
         return compute_opex(tech=tech, annual_km=annual_km, cfg=cfg, ps=ps)
     elif action == 1:
         return compute_replacement_cost(
-            new_tech=0, old_tech=int(tech), old_age=age, cfg=cfg, ps=ps
+            new_tech=0, old_tech=int(tech), old_age=age, annual_km=annual_km, cfg=cfg, ps=ps
         )
     else:  # action == 2
         return compute_replacement_cost(
-            new_tech=1, old_tech=int(tech), old_age=age, cfg=cfg, ps=ps
+            new_tech=1, old_tech=int(tech), old_age=age, annual_km=annual_km, cfg=cfg, ps=ps
         )

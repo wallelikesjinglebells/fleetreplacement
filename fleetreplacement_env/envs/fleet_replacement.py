@@ -111,7 +111,7 @@ class FleetReplacementEnv(gym.Env):
                 self.fleet_state[i] = [tech, age + 1, mileage + self.cfg.cost.akt_base]
             else:         # replace with ICT (act=1) or BET (act=2)
                 new_tech = 0.0 if act == 1 else 1.0
-                self.fleet_state[i] = [new_tech, 0.0, 0.0]      # assupmtion: new vehicle does not operate in the year of purchase in this model
+                self.fleet_state[i] = [new_tech, 1.0, self.cfg.cost.akt_base]      # assupmtion: new vehicle does operate in the year of purchase in this model
 
         self.current_step += 1
         reward = -total_cost    # agent's reward is negative cost
