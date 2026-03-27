@@ -59,7 +59,7 @@ class FleetReplacementEnv(gym.Env):
         super().reset(seed=seed)
         self.current_step = 0
 
-        ages = self.np_random.integers(0, 10, size=self.cfg.mdp.n_vehicles).astype(np.float32)      # generate random vehicle age, convert to float (as defined in obs space)
+        ages = self.np_random.integers(1, 10, size=self.cfg.mdp.n_vehicles).astype(np.float32)      # generate random vehicle age, convert to float (as defined in obs space)
         mileages = ages * self.cfg.cost.akt_base                                         # starting mileage, derived from age                                            
         technologies = np.zeros(self.cfg.mdp.n_vehicles, dtype=np.float32)                          # 0 = diesel, all ICT
 
