@@ -38,6 +38,9 @@ class StepCost:
     insurance: float = 0.0
     tax: float = 0.0
 
+    # Mid-life battery replacement
+    battery_replacement: float = 0.0
+
     @property
     def capex_net(self) -> float:
         """Net capital outlay: gross CAPEX minus subsidy and salvage of old vehicle"""
@@ -54,7 +57,7 @@ class StepCost:
     @property
     def total(self) -> float:
         """Scalar cost for this vehicle this year, negated in fleet_replacement.py for RL reward"""
-        return self.capex_net + self.opex_total
+        return self.capex_net + self.opex_total + self.battery_replacement
 
     def as_dict(self) -> dict[str, float]:
         """Utility method for conversion into dictionary for debugging"""
@@ -69,6 +72,7 @@ class StepCost:
             "driver": self.driver,
             "insurance": self.insurance,
             "tax": self.tax,
+            "battery_replacement": self.battery_replacement,
             "total": self.total,
         }
 
@@ -230,7 +234,7 @@ def compute_replacement_cost(
     cost.salvage_revenue = _market_value(old_tech, old_age, cfg, ps)    # Winkelmann: eq. (15), age-dependent sales price is accounted for in state cost calculation
 
     # OPEX !=0 for new vehicle in replacement year
-    opex = compute_opex(tech=new_tech, annual_km=annual_km, cfg=cfg, age = 0.0, ps=ps)
+    opex = compute_opex(tech=new_tech, annual_km=annual_km, cfg=cfg, age = 0.0, mileage=annual_km, ps=ps)
     cost.fuel_energy = opex.fuel_energy
     cost.toll = opex.toll
     cost.maintenance = opex.maintenance
@@ -247,6 +251,7 @@ def compute_opex(
     annual_km: float,
     cfg: CostConfig,
     age: float,
+    mileage: float,
     ps: Optional[PriceState] = None,
 ) -> StepCost:
     """
@@ -256,6 +261,7 @@ def compute_opex(
     tech       : 0 = ICT, 1 = BET
     annual_km  : km driven this year, pass cfg.akt_base as default from the env
     cfg        : CostConfig
+    mileage:   : total mileage of a vehicle, needed for mid-life check for BET battery replacement
     ps         : optional stochastic price overrides
 
     Cost components adapted from Winkelmann eq. (15) and Clara:
@@ -263,8 +269,8 @@ def compute_opex(
 
     FUTURE EXPANSIONS:
         - CO2 carbon cost (Winkelmann: monetarized with stochastic carbon price)
-        - Age-dependent maintenance scaling (maint_km is flat per km)
-        - Battery degradation/mid-life battery replacement for BET
+        - DONE Age-dependent maintenance scaling (maint_km is flat per km)
+        - DONE Battery degradation/mid-life battery replacement for BET
     """
     cost = StepCost()
     hours = annual_km / cfg.avg_speed  # driving hours per year
@@ -276,9 +282,15 @@ def compute_opex(
             * cfg.efficiency_factor_ict        # scenario efficiency scaling
             * _diesel_price(cfg, ps)
         )
+
+        # ICT toll
         cost.toll = annual_km * cfg.toll_ict * cfg.toll_ict_factor          # adapted from Clara: class ICT → self.cost_breakdown["Toll"]
+        
+        # Age-dependent maintenance
         age_scale = 1.0 + cfg.maint_age_factor_ict * age                    # age-dependent maintenance cost
         cost.maintenance = annual_km * cfg.maint_km * cfg.maint_factor * age_scale      # adapted from Clara: class ICT → self.cost_breakdown["Maintenance"]
+        
+        # Other costs
         cost.tires = annual_km * cfg.tire_km * cfg.tire_factor              # adapted from Clara: class ICT → self.cost_breakdown["Tires"]
         cost.driver = hours * cfg.driver_wage * cfg.driver_wage_factor      # adapted from Clara: class ICT → self.cost_breakdown["Driver"]
         cost.insurance = cfg.insurance_base * cfg.insurance_factor          # adapted from Clara: class ICT → self.cost_breakdown["Insurance"], base_ins = self.country.insurance_base * f_ins 
@@ -291,17 +303,28 @@ def compute_opex(
             * cfg.efficiency_factor_bet
             * _energy_price(cfg, ps)          # adapted from Clara: class BET → electricity_cost = self.AKT * ((consumption_base / 100) * final_efficiency) * (self.country.energy_price * f_energy)
         )
+        
         # BET toll: adapted from Clara 
         ict_toll_adj = cfg.toll_ict * cfg.toll_ict_factor               # adapted from Clara: class BET → future_ict_toll = self.country.toll_ict * f_toll_ict
         base_bet_toll = cfg.toll_bet * cfg.toll_bet_multiplier          # adapted from Clara: class BET → base_bet_toll = self.country.toll_bet * f_toll_mult
         floor_bet_toll = ict_toll_adj * cfg.toll_bet_share_ict          # adapted from Clara: class BET → min_bet_toll (= floor_bet_toll)
         cost.toll = annual_km * max(base_bet_toll, floor_bet_toll)      # adapted from Clara: class BET → self.cost_breakdown["Toll"], actual_toll_bet = max(base_bet_toll, min_bet_toll)
+        
+        # Age-dependent maintenance
         age_scale = 1.0 + cfg.maint_age_factor_bet * age
         cost.maintenance = annual_km * cfg.maint_km * cfg.maint_factor * age_scale  # adapted from Clara: class BET → self.cost_breakdown["Maintenance"]
+        
+        # Other costs
         cost.tires = annual_km * cfg.tire_km * cfg.tire_factor          # adapted from Clara: class BET → self.cost_breakdown["Tires"]
         cost.driver = hours * cfg.driver_wage * cfg.driver_wage_factor  # adapted from Clara: class BET → self.cost_breakdown["Driver"]
         cost.insurance = cfg.insurance_base * cfg.insurance_factor      # adapted from Clara: class BET → self.cost_breakdown["Insurance"]
         cost.tax = cfg.tax * cfg.tax_factor                             # adapted from Clara: class BET → self.cost_breakdown["Tax"]
+
+        # Mid-life battery replacement
+        midpoint = cfg.max_lifetime_km / 2.0
+        new_mileage = mileage + annual_km
+        if mileage < midpoint <= new_mileage:
+            cost.battery_replacement = _battery_cost(cfg, ps)
 
     return cost
 
@@ -312,6 +335,7 @@ def compute_step_cost(
     action: int,
     annual_km: float,
     cfg: CostConfig,
+    mileage: float,
     ps: Optional[PriceState] = None,
 ) -> StepCost:
     """
@@ -329,7 +353,7 @@ def compute_step_cost(
     StepCost (.total gives the scalar cost in fleet_replacement.py)
     """
     if action == 0:
-        return compute_opex(tech=tech, annual_km=annual_km, cfg=cfg, age=age, ps=ps)
+        return compute_opex(tech=tech, annual_km=annual_km, cfg=cfg, age=age, mileage=mileage, ps=ps)
     elif action == 1:
         return compute_replacement_cost(
             new_tech=0, old_tech=int(tech), old_age=age, annual_km=annual_km, cfg=cfg, ps=ps

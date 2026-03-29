@@ -112,6 +112,7 @@ class FleetReplacementEnv(gym.Env):
                 age=age,
                 action=act,
                 annual_km=self.cfg.cost.akt_base,
+                mileage=mileage,
                 cfg=self.cfg.cost,
             )
             total_cost += cost_item.total
