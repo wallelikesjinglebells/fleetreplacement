@@ -63,7 +63,7 @@ model = MaskablePPO(
 
 # Train
 model.learn(total_timesteps=TOTAL_STEPS, callback=eval_callback, progress_bar=True)
-model = PPO.load(f"{SAVE_PATH}/best_model")                                             # reload best model
+model = MaskablePPO.load(f"{SAVE_PATH}/best_model")                                             # reload best model
 
 # Save final model at end of training
 model.save(f"{SAVE_PATH}_final")
