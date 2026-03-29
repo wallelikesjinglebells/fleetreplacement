@@ -10,8 +10,8 @@ import ast
 class MDPConfig:
     # MDP parameters with default values
     n_vehicles: int = 10            # fleet size
-    max_vehicle_age: int = 20       # max truck age in years before forced retirement
-    # max_mileage: int = 1_500_000      # max truck mileage in km before forced retirement
+    max_vehicle_age: int = 12       # max truck age in years before forced retirement, slightly looser than km (km is primary signal)
+    # max_mileage: int = 1_500_000      # max truck mileage in km before forced retirement (now: max_lifetime_km)
     planning_horizon: int = 20      # planning time horizon in years (when is one training episode over?)
     start_year: int = 2026          # current year (needed for calculating ICT purchase ban step)
 

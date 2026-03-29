@@ -158,7 +158,7 @@ class FleetReplacementEnv(gym.Env):
             # Rule 2: Force replace if at lifetime limit
             must_replace = (
                 age + 1 >= self.cfg.mdp.max_vehicle_age
-                or mileage + self.cfg.cost.akt_base >= self.cfg.cost.max_lifetime_km
+                or mileage + self.cfg.cost.akt_base >= self.cfg.cost.max_lifetime_km    # primary limit, see config.py
             )
             if must_replace:
                 masks[i, 0] = False  # cannot keep, but agent can decide if replace with BET or ICT
