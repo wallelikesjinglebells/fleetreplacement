@@ -64,13 +64,12 @@ class FleetReplacementEnv(gym.Env):
         super().reset(seed=seed)
         self.current_step = 0
 
-        ages = self.np_random.integers(1, 10, size=self.cfg.mdp.n_vehicles).astype(np.float32)      # generate random vehicle age, convert to float (as defined in obs space)
-        # mileages = ages * self.cfg.cost.akt_base                                         # starting mileage, derived from age       
-        mileages = np.minimum(                                    
-            ages * self.cfg.cost.akt_base,
-            self.cfg.cost.max_lifetime_km - self.cfg.cost.akt_base
-        )                                     
-        technologies = np.zeros(self.cfg.mdp.n_vehicles, dtype=np.float32)                          # 0 = diesel, all ICT
+        # Initialize age
+        max_init_age = int(self.cfg.cost.max_lifetime_km / self.cfg.cost.akt_base) - 1                            # computes the highest safe age to initialize; -1 ensures vehicle still has one full year of operation left before hitting force-replace threshold
+        ages = self.np_random.integers(1, max_init_age + 1, size=self.cfg.mdp.n_vehicles).astype(np.float32)      # generate random vehicle age; +1 allows max_init_age to be included in range (np is exclusive on upper bound); convert to float (as defined in obs space)
+        # Initialize mileage
+        mileages = ages * self.cfg.cost.akt_base                                                                  # starting mileage, derived from age
+        technologies = np.zeros(self.cfg.mdp.n_vehicles, dtype=np.float32)                                        # 0 = diesel, all ICT
 
         self.fleet_state = np.stack([technologies, ages, mileages], axis=1)            # combine above arrays to matrix of shape (n_vehicles, 3) to make columns parameters, rows vehicles
 
