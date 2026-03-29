@@ -38,12 +38,14 @@ class CostConfig:
     # row 1, 01_ICT_Manual_Multi
     capex_ict: float            # corresponds to capex_base
     consumption_ict: float      # corresponds to consumption, L/100km
+    maint_age_factor_ict: float # adapted from Emiliano et al. (2020), maintenance cost +13.4% per year of age for diesel bus
 
     # row 5, 05_BET_Manual_Multi
     capex_bet_excl_bat: float   # corresnponds to capex_base (truck price excluding battery)
     bat_cap: float              # battery capacity
     price_kwh_base: float       # battery price
     consumption_bet: float      # consumption kWh/100km
+    maint_age_factor_bet: float # is 0 for now
 
     # shared params
     akt_base: float             # Clara: annual km for long-haul, no longer in MDPConfig (SSOT here)
@@ -148,12 +150,14 @@ def load_cost_config(
         # --- trucks.csv (ICT) ---
         capex_ict = get_float(ict, "capex_base"),
         consumption_ict = get_float(ict, "consumption"),
+        maint_age_factor_ict = get_float(ict, "maint_age_factor"),
 
         # --- trucks.csv (BET) ---
         capex_bet_excl_bat = get_float(bet, "capex_base"),
         bat_cap = get_float(bet, "bat_cap"),
         price_kwh_base = get_float(bet, "price_kwh_base"),
         consumption_bet = get_float(bet, "consumption"),
+        maint_age_factor_bet = get_float(bet, "maint_age_factor"),
 
         # --- trucks.csv (shared) ---
         akt_base = get_float(ict, "akt_base"),
