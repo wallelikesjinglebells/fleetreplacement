@@ -15,7 +15,7 @@ done = False
 total_reward = 0.0
 
 while not done:
-    action, _ = model.predict(obs, deterministic=True)
+    action, _ = model.predict(obs, deterministic=True, action_masks=env.action_masks())
     obs, reward, terminated, truncated, info = env.step(action)
     total_reward += reward
     done = terminated or truncated

@@ -1,6 +1,6 @@
 import fleetreplacement_env  # triggers register() in __init__.py, is important for gym.make() although flagged as not accessed
 import gymnasium as gym
-from stable_baselines3 import MaskablePPO
+from sb3_contrib import MaskablePPO
 from sb3_contrib.common.wrappers import ActionMasker                        
 from sb3_contrib.common.maskable.callbacks import MaskableEvalCallback
 from stable_baselines3.common.env_util import make_vec_env
