@@ -12,7 +12,8 @@ class MDPConfig:
     n_vehicles: int = 10            # fleet size
     max_vehicle_age: int = 20       # max truck age in years before forced retirement
     # max_mileage: int = 1_500_000      # max truck mileage in km before forced retirement
-    planning_horizon: int = 10      # planning time horizon in years (when is one training episode over?)
+    planning_horizon: int = 20      # planning time horizon in years (when is one training episode over?)
+    start_year: int = 2026          # current year (needed for calculating ICT purchase ban step)
 
 # Cost parameters for costs.py
 @dataclass
@@ -93,6 +94,9 @@ class CostConfig:
     residual_ict_perc: float
     residual_bet_truck_perc: float
     residual_bat_perc: float
+
+    # ICT ban year
+    ict_ban_year: int
 
     # Omitted
     # ee_energy_factor: float     # only activates for automated truck with EE in name
@@ -188,5 +192,6 @@ def load_cost_config(
         residual_ict_perc = get_float(scen, "residual_ict_truck_perc"),
         residual_bet_truck_perc = get_float(scen, "residual_bet_truck_perc"),
         residual_bat_perc = get_float(scen, "residual_bat_perc"),
+        ict_ban_year = get_float(scen, "ict_ban_year"),
 
     )

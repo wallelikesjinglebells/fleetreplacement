@@ -36,6 +36,10 @@ class FleetReplacementEnv(gym.Env):
         # Action space
         self.action_space = spaces.MultiDiscrete([3] * n_vehicles)        # 0=keep, 1=replace with ICT, 2=replace with BET
 
+        # Derive ICT purchase ban step from calendar year, limit to [0, planning_horizon]
+        raw_ban_step = self.cfg.cost.ict_ban_year - self.cfg.mdp.start_year 
+        self.ict_ban_step = max(0, min(raw_ban_step, self.cfg.mdp.planning_horizon))
+
     # Constructing observations for NN
     def _get_obs(self):
         tech = self.fleet_state[:, 0]
