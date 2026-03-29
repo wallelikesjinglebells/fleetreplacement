@@ -92,17 +92,17 @@ class FleetReplacementEnv(gym.Env):
             # replace = bool(action[i])                   # convert binary action into true/false
             act = int(action[i])                        # assign value of replacement to act (0 = keep, 1 = replace with ICT, 2 = replace with BET)
 
-            # Forced replacement if limits exceeded (regardless of action)
-            # Returns true or false if one is true
-            force_replace = (
-                age + 1 >= self.cfg.mdp.max_vehicle_age
-                # or mileage + self.cfg.cost.akt_base >= self.cfg.mdp.max_mileage
-                or mileage + self.cfg.cost.akt_base >= self.cfg.cost.max_lifetime_km
-            )
+            # # Forced replacement if limits exceeded (regardless of action)
+            # # Returns true or false if one is true
+            # force_replace = (
+            #     age + 1 >= self.cfg.mdp.max_vehicle_age
+            #     # or mileage + self.cfg.cost.akt_base >= self.cfg.mdp.max_mileage
+            #     or mileage + self.cfg.cost.akt_base >= self.cfg.cost.max_lifetime_km
+            # )
 
-            # If agent says no replacement, but force_replace is true, default to replace with ICT
-            if force_replace and act == 0:
-                act = 1
+            # # If agent says no replacement, but force_replace is true, default to replace with ICT
+            # if force_replace and act == 0:
+            #     act = 1
 
             resolved_action[i] = act
 
@@ -133,6 +133,46 @@ class FleetReplacementEnv(gym.Env):
             self._render_frame(resolved_action, total_cost)
 
         return self._get_obs(), reward, terminated, truncated, self._get_info()
+    
+    # Action masking
+    def action_masks(self) -> np.ndarray:
+        """
+        Returns a flat bool array of shape (n_vehicles * 3,) for MaskablePPO
+        [keep, replace with ICT, replace with BET]
+        True = action is valid, False = action is masked out
+        """
+        assert self.fleet_state is not None, "Call reset() before action_masks()."
+        n = self.cfg.mdp.n_vehicles
+        masks = np.ones((n, 3), dtype=bool)     # n=vehicles, 3 possible actions
+
+        ict_banned = self.current_step >= self.ict_ban_step
+
+        for i in range(n):
+            tech, age, mileage = self.fleet_state[i]
+
+            # Rule 1: Block replacing a brand-new vehicle (age == 1)
+            if age <= 1.0:
+                masks[i, 1] = False  # block replace with ICT
+                masks[i, 2] = False  # block replace with BET
+
+            # Rule 2: Force replace if at lifetime limit
+            must_replace = (
+                age + 1 >= self.cfg.mdp.max_vehicle_age
+                or mileage + self.cfg.cost.akt_base >= self.cfg.cost.max_lifetime_km
+            )
+            if must_replace:
+                masks[i, 0] = False  # cannot keep, but agent can decide if replace with BET or ICT
+
+            # Rule 3: Block ICT purchase after ban year
+            if ict_banned:
+                masks[i, 1] = False  # block replace with ICT
+
+            # Safety: ensure at least one action is always valid
+            # Edge case: age==1 AND must_replace, theoretically impossible given max_vehicle_age >> 1
+            if not masks[i].any():
+                masks[i, 2] = True  # BET replacement is the last-resort fallback
+
+        return masks.flatten()
     
     # Rendering method
     def render(self):

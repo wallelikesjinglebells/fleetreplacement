@@ -1,6 +1,8 @@
 import fleetreplacement_env  # triggers register() in __init__.py, is important for gym.make() although flagged as not accessed
 import gymnasium as gym
-from stable_baselines3 import PPO
+from stable_baselines3 import MaskablePPO
+from sb3_contrib.common.wrappers import ActionMasker                        
+from sb3_contrib.common.maskable.callbacks import MaskableEvalCallback
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.monitor import Monitor
@@ -17,12 +19,18 @@ EVAL_FREQ     = 10_000    # pause training every EVAL_FREQ steps to evaluate cur
 LOG_DIR       = "./logs/"
 SAVE_PATH     = "./models/ppo_fleet"
 
+# Wrap env with ActionMasker
+def make_masked_env():
+    env = gym.make(ENV_ID)
+    env = ActionMasker(env, lambda e: e.action_masks())  # tells SB3 where to find masks
+    return env
+
 # Create vectorized environment for all N_ENVS environments
-vec_env = make_vec_env(ENV_ID, n_envs=N_ENVS)
+vec_env = make_vec_env(make_masked_env, n_envs=N_ENVS)
 vec_env = VecNormalize(vec_env, norm_obs=False, norm_reward=True, gamma=0.99)       # normalize reward
 
 # Single evaluation environment
-_monitor_env = Monitor(gym.make(ENV_ID), filename="./logs/eval_monitor")        # Monitor wrapper to fix warning if other wrappers are present
+_monitor_env = Monitor(make_masked_env(), filename="./logs/eval_monitor")        # Monitor wrapper to fix warning if other wrappers are present
 eval_env = DummyVecEnv([lambda: _monitor_env])
 eval_env = VecNormalize(eval_env, norm_obs=False, norm_reward=True,
                         training=False, gamma=0.99)
@@ -30,7 +38,7 @@ eval_env = VecNormalize(eval_env, norm_obs=False, norm_reward=True,
 sync_envs_normalization(vec_env, eval_env)
 
 # Callback: every EVAL_FREQ, run current policy on eval_env, record mean reward, if better than previous best 
-eval_callback = EvalCallback(
+eval_callback = MaskableEvalCallback(
     eval_env,
     best_model_save_path=SAVE_PATH,
     log_path=LOG_DIR,
@@ -40,7 +48,7 @@ eval_callback = EvalCallback(
 )
 
 # PPO agent
-model = PPO(
+model = MaskablePPO(
     policy="MlpPolicy",     # standard MLP for flat/matrix observations
     env=vec_env,
     verbose=1,
