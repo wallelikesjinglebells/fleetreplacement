@@ -192,6 +192,6 @@ def load_cost_config(
         residual_ict_perc = get_float(scen, "residual_ict_truck_perc"),
         residual_bet_truck_perc = get_float(scen, "residual_bet_truck_perc"),
         residual_bat_perc = get_float(scen, "residual_bat_perc"),
-        ict_ban_year = get_float(scen, "ict_ban_year"),
+        ict_ban_year = int(get_float(scen, "ict_ban_year")),
 
     )
