@@ -122,7 +122,33 @@ def _battery_cost(cfg: CostConfig, ps: Optional[PriceState]) -> float:
                  else cfg.price_kwh_base)
     return cfg.bat_cap * cfg.bat_cap_factor * kwh_price * cfg.price_kwh_factor
 
+# DEPRECATED MARKET VALUE CALCULATION (BEFORE ACTION MASKING WAS IMPLEMENTED)
+# def _market_value(
+#     tech: int,
+#     age: float,
+#     cfg: CostConfig,
+#     ps: Optional[PriceState] = None,
+# ) -> float:
+#     """
+#     Current market value of a vehicle of given technology and age
+#     Geometric-degressive depreciation (Winkelmann)
+#     """
+#     n = max(cfg.n_years, 1.0)
+#     age_eff = age + 1     # new vehicle immediately has value of 1-year-old vehicle
 
+#     # ICT
+#     if tech == 0:
+#         capex = _capex_ict_gross(cfg, ps)
+#         val = capex * (cfg.residual_ict_perc ** (age_eff / n))
+#         return max(0.0, val)                                    # prevent negative values if a vehicle is held past its assumed lifetime
+
+#     else:  # BET: separate depreciation for truck body and battery
+#         capex_truck = _capex_bet_truck_gross(cfg, ps)
+#         capex_bat = _battery_cost(cfg, ps)
+#         val_truck = capex_truck * (cfg.residual_bet_truck_perc ** (age_eff / n))
+#         val_bat = capex_bat * (cfg.residual_bat_perc ** (age_eff / n))
+#         return max(0.0, val_truck + val_bat)
+    
 def _market_value(
     tech: int,
     age: float,
@@ -134,19 +160,18 @@ def _market_value(
     Geometric-degressive depreciation (Winkelmann)
     """
     n = max(cfg.n_years, 1.0)
-    age_eff = age + 1     # new vehicle immediately has value of 1-year-old vehicle
 
     # ICT
     if tech == 0:
         capex = _capex_ict_gross(cfg, ps)
-        val = capex * (cfg.residual_ict_perc ** (age_eff / n))
+        val = capex * (cfg.residual_ict_perc ** (age / n))
         return max(0.0, val)                                    # prevent negative values if a vehicle is held past its assumed lifetime
 
     else:  # BET: separate depreciation for truck body and battery
         capex_truck = _capex_bet_truck_gross(cfg, ps)
         capex_bat = _battery_cost(cfg, ps)
-        val_truck = capex_truck * (cfg.residual_bet_truck_perc ** (age_eff / n))
-        val_bat = capex_bat * (cfg.residual_bat_perc ** (age_eff / n))
+        val_truck = capex_truck * (cfg.residual_bet_truck_perc ** (age / n))
+        val_bat = capex_bat * (cfg.residual_bat_perc ** (age / n))
         return max(0.0, val_truck + val_bat)
     
 
