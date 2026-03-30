@@ -1,6 +1,4 @@
 """
-Pipeline smoke test — run from project root:
-    python test_pipeline.py
 Tests three layers: CSV integrity → config loading → costs → env step.
 No training, no SB3.
 """
@@ -34,7 +32,7 @@ COUNTRIES_COLS = [
 ]
 TRUCKS_COLS = [
     "name", "capex_base", "consumption", "bat_cap", "price_kwh_base",
-    "akt_base", "avg_speed",
+    "akt_base", "avg_speed", "maint_age_factor",
 ]
 SCENARIOS_COLS = [
     "name", "i_rate", "n_years", "bat_cap_factor", "price_kwh_factor",
@@ -45,6 +43,7 @@ SCENARIOS_COLS = [
     "maint_manual_factor", "driver_wage_factor", "tire_factor", "insurance_factor",
     "capex_ict_factor", "capex_bet_factor",
     "residual_ict_truck_perc", "residual_bet_truck_perc", "residual_bat_perc",
+    "ict_ban_year",
 ]
 
 try:
@@ -156,14 +155,14 @@ try:
 
     # Action 0: keep ICT
     sc_keep_ict = compute_step_cost(tech=0, age=5.0, action=0,
-                                    annual_km=annual_km, cfg=cfg)
+                                    annual_km=annual_km, mileage=annual_km*5, cfg=cfg)
     check("keep ICT  → opex_total > 0",  sc_keep_ict.opex_total > 0,
           f"got {sc_keep_ict.opex_total:.0f}")
     check("keep ICT  → capex_gross == 0", sc_keep_ict.capex_gross == 0.0)
 
     # Action 1: replace with ICT
     sc_repl_ict = compute_step_cost(tech=0, age=5.0, action=1,
-                                    annual_km=annual_km, cfg=cfg)
+                                    annual_km=annual_km, mileage=annual_km*5, cfg=cfg)
     check("replace→ICT → capex_gross > 0", sc_repl_ict.capex_gross > 0,
           f"got {sc_repl_ict.capex_gross:.0f}")
     check("replace→ICT → salvage_revenue > 0 (age=5)", sc_repl_ict.salvage_revenue > 0,
@@ -171,14 +170,14 @@ try:
 
     # Action 2: replace with BET
     sc_repl_bet = compute_step_cost(tech=0, age=5.0, action=2,
-                                    annual_km=annual_km, cfg=cfg)
+                                    annual_km=annual_km, mileage=annual_km*5, cfg=cfg)
     check("replace→BET → capex_gross > ICT capex",
           sc_repl_bet.capex_gross > sc_repl_ict.capex_gross,
           f"BET={sc_repl_bet.capex_gross:.0f}  ICT={sc_repl_ict.capex_gross:.0f}")
 
     # Keep BET (age 3)
     sc_keep_bet = compute_step_cost(tech=1, age=3.0, action=0,
-                                    annual_km=annual_km, cfg=cfg)
+                                    annual_km=annual_km, mileage=annual_km*3, cfg=cfg)
     check("keep BET  → opex_total > 0", sc_keep_bet.opex_total > 0,
           f"got {sc_keep_bet.opex_total:.0f}")
 
