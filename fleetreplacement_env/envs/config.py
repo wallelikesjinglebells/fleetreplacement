@@ -52,6 +52,7 @@ class CostConfig:
     # shared params
     akt_base: float             # Clara: annual km for long-haul, no longer in MDPConfig (SSOT here)
     avg_speed: float
+    annual_capex_budget: float  # yearly purchase budget in €, loaded from trucks.csv
     # wage_factor: float        # is 1, omitted
 
     # --- scenarios.csv ---
@@ -167,6 +168,7 @@ def load_cost_config(
         # --- trucks.csv (shared) ---
         akt_base = get_float(ict, "akt_base"),
         avg_speed = get_float(ict, "avg_speed"),
+        annual_capex_budget = get_float(ict, "yearly_budget"),
 
         # --- scenarios.csv ---
         i_rate = get_float(scen, "i_rate"),
