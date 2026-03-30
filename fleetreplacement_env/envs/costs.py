@@ -234,7 +234,7 @@ def compute_replacement_cost(
     cost.salvage_revenue = _market_value(old_tech, old_age, cfg, ps)    # Winkelmann: eq. (15), age-dependent sales price is accounted for in state cost calculation
 
     # OPEX !=0 for new vehicle in replacement year
-    opex = compute_opex(tech=new_tech, annual_km=annual_km, cfg=cfg, age = 0.0, mileage=annual_km, ps=ps)
+    opex = compute_opex(tech=new_tech, annual_km=annual_km, cfg=cfg, age=0.0, mileage=0.0, ps=ps)       # mileage = vehicle's odometer at the start of the year
     cost.fuel_energy = opex.fuel_energy
     cost.toll = opex.toll
     cost.maintenance = opex.maintenance
