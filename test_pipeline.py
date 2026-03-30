@@ -263,6 +263,53 @@ try:
 except Exception as e:
     check("fleet_replacement.py env", False, traceback.format_exc())
 
+
+# ─────────────────────────────────────────────────────────
+# LAYER 5: MaskablePPO smoke test  (SB3 integration)
+# ─────────────────────────────────────────────────────────
+section("LAYER 5 — MaskablePPO SB3 integration smoke test")
+
+SMOKE_STEPS = 2048   # one PPO rollout buffer; fast but exercises the full train loop
+
+try:
+    import gymnasium as gym
+    import fleetreplacement_env  # triggers gym.register()
+    from sb3_contrib import MaskablePPO
+    from sb3_contrib.common.wrappers import ActionMasker
+    from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+    check("SB3 / sb3_contrib imports OK", True)
+
+    def _make_masked():
+        e = gym.make("FleetReplacement-v0")
+        return ActionMasker(e, lambda env: env.unwrapped.action_masks())
+
+    vec_env = DummyVecEnv([_make_masked])
+    vec_env = VecNormalize(vec_env, norm_obs=False, norm_reward=True, gamma=0.99)
+    check("DummyVecEnv + VecNormalize construct OK", True)
+
+    model = MaskablePPO("MlpPolicy", vec_env, verbose=0, n_steps=SMOKE_STEPS, batch_size=64)
+    check("MaskablePPO constructs OK", True)
+
+    model.learn(total_timesteps=SMOKE_STEPS)
+    check(f"model.learn({SMOKE_STEPS} steps) completes without error", True)
+
+    # Verify predict() respects masks on a single obs
+    raw_env = gym.make("FleetReplacement-v0")
+    raw_env = ActionMasker(raw_env, lambda env: env.unwrapped.action_masks())
+    obs, _ = raw_env.reset(seed=0)
+    obs_arr = obs[np.newaxis, :]   # add batch dim
+    masks = raw_env.action_masks()
+    action, _ = model.predict(obs_arr, action_masks=masks[np.newaxis, :], deterministic=True)
+    check("model.predict() returns action array", action is not None)
+    n = raw_env.env.unwrapped.cfg.mdp.n_vehicles
+    check(f"predicted action shape == ({n},)", action.shape == (1, n),
+          f"got {action.shape}")
+    raw_env.close()
+    vec_env.close()
+
+except Exception as e:
+    check("MaskablePPO smoke test", False, traceback.format_exc())
+
 print("\n" + "="*55)
 print("  Done. Fix any [FAIL] lines above before training.")
 print("="*55 + "\n")
