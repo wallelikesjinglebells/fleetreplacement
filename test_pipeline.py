@@ -3,6 +3,7 @@ Tests three layers: CSV integrity → config loading → costs → env step.
 No training, no SB3.
 """
 import sys, traceback
+sys.stdout.reconfigure(encoding="utf-8")
 import pandas as pd
 import ast
 import numpy as np
