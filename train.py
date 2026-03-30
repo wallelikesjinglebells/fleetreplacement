@@ -22,7 +22,7 @@ SAVE_PATH     = "./models/ppo_fleet"
 # Wrap env with ActionMasker
 def make_masked_env():
     env = gym.make(ENV_ID)
-    env = ActionMasker(env, lambda e: e.action_masks())  # tells SB3 where to find masks
+    env = ActionMasker(env, lambda e: e.unwrapped.action_masks())  # lambda tells SB3 where to find masks
     return env
 
 # Create vectorized environment for all N_ENVS environments
