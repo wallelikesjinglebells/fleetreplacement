@@ -12,6 +12,7 @@ class MDPConfig:
     n_vehicles: int = 10            # fleet size
     max_vehicle_age: int = 12       # max truck age in years before forced retirement, slightly looser than km (km is primary signal)
     # max_mileage: int = 1_500_000      # max truck mileage in km before forced retirement (now: max_lifetime_km)
+    max_possible_lifetime_km: float = 0.0   # max max_lifetime_km across all scenarios, used for obs normalization; set via load_max_lifetime_km()
     planning_horizon: int = 20      # planning time horizon in years (when is one training episode over?)
     start_year: int = 2026          # current year (needed for calculating ICT purchase ban step)
 
@@ -195,3 +196,14 @@ def load_cost_config(
         ict_ban_year = int(get_float(scen, "ict_ban_year")),
 
     )
+
+def load_max_lifetime_km(
+    scenarios_path: str | Path = "data/scenarios.csv",
+) -> float:
+    """
+    Helper function to read all rows of scenarios.csv 
+    Returns the maximum max_lifetime_km across all scenarios
+    Ror use as a fixed normalization denominator in fleet_replacement.py
+    """
+    df = pd.read_csv(scenarios_path, sep=";", decimal=",")
+    return float(df["max_lifetime_km"].max())

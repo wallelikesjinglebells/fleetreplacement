@@ -1,7 +1,7 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config
+from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config, load_max_lifetime_km
 from fleetreplacement_env.envs.costs import compute_step_cost
 
 class FleetReplacementEnv(gym.Env):
@@ -13,10 +13,13 @@ class FleetReplacementEnv(gym.Env):
         # If no config is pased, build a default config by loading from CSV files
         if config is None:
             config = FleetEnvConfig(
-                mdp = MDPConfig(),
+                mdp = MDPConfig(max_possible_lifetime_km=load_max_lifetime_km()),
                 cost = load_cost_config()     # call loading config
             )
         self.cfg = config                     # holds self.cfg.mdp and self.cfg.cost
+        # Assertion to catch case where MDPConfig() is constructed manually and max_possible_lifetime_km is not set
+        assert self.cfg.mdp.max_possible_lifetime_km > 0, \
+            "MDPConfig.max_possible_lifetime_km must be set — use load_max_lifetime_km()"
 
         self.current_step = 0
         self.fleet_state: np.ndarray | None = None  # represent unitialized state, for guard in step()
@@ -45,7 +48,7 @@ class FleetReplacementEnv(gym.Env):
         tech = self.fleet_state[:, 0]
         age = self.fleet_state[:, 1] / self.cfg.mdp.max_vehicle_age                                          # normalize
         # mileage = self.fleet_state[:, 2] / self.cfg.mdp.max_mileage 
-        mileage = self.fleet_state[:, 2] / self.cfg.cost.max_lifetime_km                                         # normalize
+        mileage = self.fleet_state[:, 2] / self.cfg.mdp.max_possible_lifetime_km                          # normalize using max_possible_lifetime_km
         flat_fleet = np.stack([tech, age, mileage], axis=1).flatten().astype(np.float32)        
         step_feature = np.array([self.current_step / self.cfg.mdp.planning_horizon], dtype=np.float32)       # normalize
         return np.concatenate([flat_fleet, step_feature])
