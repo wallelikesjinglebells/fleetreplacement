@@ -126,8 +126,10 @@ class FleetReplacementEnv(gym.Env):
                 new_tech = 0.0 if act == 1 else 1.0
                 self.fleet_state[i] = [new_tech, 1.0, self.cfg.cost.akt_base]      # assupmtion: new vehicle does operate in the year of purchase in this model
 
+        # Dicsount cost
+        discount = 1.0 / (1.0 + self.cfg.cost.i_rate) ** self.current_step
         self.current_step += 1
-        reward = -total_cost    # agent's reward is negative cost
+        reward = -total_cost * discount    # agent's reward is negative discounted cost (NPV)
         truncated = self.current_step >= self.cfg.mdp.planning_horizon
         terminated = False  
 
