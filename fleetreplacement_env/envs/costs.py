@@ -33,7 +33,6 @@ class StepCost:
     fuel_energy: float = 0.0        # diesel or electricity cost
     toll: float = 0.0
     maintenance: float = 0.0
-    tires: float = 0.0
     driver: float = 0.0             # hours-based, using avg_speed
     insurance: float = 0.0
     tax: float = 0.0
@@ -51,7 +50,7 @@ class StepCost:
         """Total OPEX"""
         return (
             self.fuel_energy + self.toll + self.maintenance
-            + self.tires + self.driver + self.insurance + self.tax
+            + self.driver + self.insurance + self.tax
         )
 
     @property
@@ -68,7 +67,6 @@ class StepCost:
             "fuel_energy": self.fuel_energy,
             "toll": self.toll,
             "maintenance": self.maintenance,
-            "tires": self.tires,
             "driver": self.driver,
             "insurance": self.insurance,
             "tax": self.tax,
@@ -238,7 +236,6 @@ def compute_replacement_cost(
     cost.fuel_energy = opex.fuel_energy
     cost.toll = opex.toll
     cost.maintenance = opex.maintenance
-    cost.tires = opex.tires
     cost.driver = opex.driver
     cost.insurance = opex.insurance
     cost.tax = opex.tax
@@ -288,10 +285,9 @@ def compute_opex(
         
         # Age-dependent maintenance
         age_scale = 1.0 + cfg.maint_age_factor_ict * age                    # age-dependent maintenance cost
-        cost.maintenance = annual_km * cfg.maint_km * cfg.maint_factor * age_scale      # adapted from Clara: class ICT → self.cost_breakdown["Maintenance"]
-        
+        cost.maintenance = annual_km * cfg.maint_km_ict * cfg.maint_factor * age_scale      # adapted from Clara: class ICT → self.cost_breakdown["Maintenance"]
+
         # Other costs
-        cost.tires = annual_km * cfg.tire_km * cfg.tire_factor              # adapted from Clara: class ICT → self.cost_breakdown["Tires"]
         cost.driver = hours * cfg.driver_wage * cfg.driver_wage_factor      # adapted from Clara: class ICT → self.cost_breakdown["Driver"]
         cost.insurance = cfg.insurance_base * cfg.insurance_factor          # adapted from Clara: class ICT → self.cost_breakdown["Insurance"], base_ins = self.country.insurance_base * f_ins 
         cost.tax = cfg.tax * cfg.tax_factor                                 # adapted from Clara: class ICT → self.cost_breakdown["Tax"]
@@ -312,10 +308,9 @@ def compute_opex(
         
         # Age-dependent maintenance
         age_scale = 1.0 + cfg.maint_age_factor_bet * age
-        cost.maintenance = annual_km * cfg.maint_km * cfg.maint_factor * age_scale  # adapted from Clara: class BET → self.cost_breakdown["Maintenance"]
-        
+        cost.maintenance = annual_km * cfg.maint_km_bet * cfg.maint_factor * age_scale  # adapted from Clara: class BET → self.cost_breakdown["Maintenance"]
+
         # Other costs
-        cost.tires = annual_km * cfg.tire_km * cfg.tire_factor          # adapted from Clara: class BET → self.cost_breakdown["Tires"]
         cost.driver = hours * cfg.driver_wage * cfg.driver_wage_factor  # adapted from Clara: class BET → self.cost_breakdown["Driver"]
         cost.insurance = cfg.insurance_base * cfg.insurance_factor      # adapted from Clara: class BET → self.cost_breakdown["Insurance"]
         cost.tax = cfg.tax * cfg.tax_factor                             # adapted from Clara: class BET → self.cost_breakdown["Tax"]
