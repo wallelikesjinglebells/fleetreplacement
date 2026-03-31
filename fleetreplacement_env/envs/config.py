@@ -29,8 +29,8 @@ class CostConfig:
     toll_bet: float
     driver_wage: float
     tax: float
-    maint_km: float
-    tire_km: float
+    maint_km_ict: float
+    maint_km_bet: float
     insurance_base: float
     subsidy_perc: float
     subsidy_max: float
@@ -146,8 +146,8 @@ def load_cost_config(
         toll_bet = get_float(de, "toll_bet"),
         driver_wage = get_float(de, "driver_wage"),
         tax = get_float(de, "tax"),
-        maint_km = get_float(de, "maint_km"),
-        tire_km = get_float(de, "tire_km"),
+        maint_km_ict = get_float(de, "maint_km_ICT"),
+        maint_km_bet = get_float(de, "maint_km_BET"),
         insurance_base = get_float(de, "insurance_base"),
         subsidy_perc = get_float(sub, "percentage"),
         subsidy_max = get_float(sub, "max_amount"),
