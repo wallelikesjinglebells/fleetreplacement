@@ -22,7 +22,6 @@ class FleetReplacementEnv(gym.Env):
             "MDPConfig.max_possible_lifetime_km must be set — use load_max_lifetime_km()"
 
         self.current_step = 0
-        self.remaining_budget: float = self.cfg.cost.annual_capex_budget
         self.fleet_state: np.ndarray | None = None  # represent unitialized state, for guard in step()
         self.render_mode = render_mode              # for rendering
 
@@ -30,10 +29,10 @@ class FleetReplacementEnv(gym.Env):
         n_vehicles = self.cfg.mdp.n_vehicles
         
         # State space as box, matrix of shape (n_vehicles, 3 (technology, age, mileage))
-        # Features: n_vehicles*3 (fleet) + 1 (step) + 1 (remaining budget) = n_vehicles*3+2
+        # After including current_step in state space: vector with n_vehicles*3+1 elements
         self.observation_space = spaces.Box(
-            low  = np.zeros(n_vehicles * 3 + 2, dtype=np.float32),
-            high = np.ones( n_vehicles * 3 + 2, dtype=np.float32),
+            low  = np.zeros(n_vehicles * 3 + 1, dtype=np.float32),                                                                                
+            high = np.ones( n_vehicles * 3 + 1, dtype=np.float32),
             dtype = np.float32
         )
 
@@ -48,14 +47,11 @@ class FleetReplacementEnv(gym.Env):
     def _get_obs(self):
         tech = self.fleet_state[:, 0]
         age = self.fleet_state[:, 1] / self.cfg.mdp.max_vehicle_age                                          # normalize
-        mileage = self.fleet_state[:, 2] / self.cfg.mdp.max_possible_lifetime_km                             # normalize using max_possible_lifetime_km
-        flat_fleet = np.stack([tech, age, mileage], axis=1).flatten().astype(np.float32)
+        # mileage = self.fleet_state[:, 2] / self.cfg.mdp.max_mileage 
+        mileage = self.fleet_state[:, 2] / self.cfg.mdp.max_possible_lifetime_km                          # normalize using max_possible_lifetime_km
+        flat_fleet = np.stack([tech, age, mileage], axis=1).flatten().astype(np.float32)        
         step_feature = np.array([self.current_step / self.cfg.mdp.planning_horizon], dtype=np.float32)       # normalize
-        budget_feature = np.array(
-            [np.clip(self.remaining_budget / self.cfg.cost.annual_capex_budget, 0.0, 1.0)],
-            dtype=np.float32,
-        )                                                                                                      # normalize; clipped to [0,1] in case of overspend
-        return np.concatenate([flat_fleet, step_feature, budget_feature])
+        return np.concatenate([flat_fleet, step_feature])
     
     def _get_info(self):
         return {
@@ -70,7 +66,6 @@ class FleetReplacementEnv(gym.Env):
     def reset(self, seed: int | None = None, options: dict | None = None):
         super().reset(seed=seed)
         self.current_step = 0
-        self.remaining_budget = self.cfg.cost.annual_capex_budget
 
         # Initialize age
         max_init_age = int(self.cfg.cost.max_lifetime_km / self.cfg.cost.akt_base) - 1                            # computes the highest safe age to initialize; -1 ensures vehicle still has one full year of operation left before hitting force-replace threshold
