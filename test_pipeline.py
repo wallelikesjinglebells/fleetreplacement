@@ -28,8 +28,9 @@ errors = []
 section("LAYER 1 — CSV file integrity")
 
 COUNTRIES_COLS = [
-    "name", "diesel_price", "energy_price", "toll_ict", "toll_bet",
-    "driver_wage", "tax", "maint_km", "tire_km", "insurance_base", "subsidy_data",
+    "name", "diesel_price", "energy_price", "construction_cost_contrib", "charger_price",
+    "toll_ict", "toll_bet", "driver_wage", "tax",
+    "maint_km_ICT", "maint_km_BET", "insurance_base", "subsidy_type", "subsidy_data",
 ]
 TRUCKS_COLS = [
     "name", "capex_base", "consumption", "bat_cap", "price_kwh_base",
@@ -111,7 +112,8 @@ try:
 
     # Spot-check a few fields that should be clearly > 0
     must_be_positive = [
-        "diesel_price", "energy_price", "capex_ict", "capex_bet_excl_bat",
+        "diesel_price", "energy_price", "construction_cost_contrib", "charger_price",
+        "capex_ict", "capex_bet_excl_bat",
         "bat_cap", "price_kwh_base", "consumption_ict", "consumption_bet",
         "akt_base", "avg_speed", "n_years",
     ]
@@ -169,12 +171,41 @@ try:
     check("replace→ICT → salvage_revenue > 0 (age=5)", sc_repl_ict.salvage_revenue > 0,
           f"got {sc_repl_ict.salvage_revenue:.0f}")
 
-    # Action 2: replace with BET
+    # Action 2: replace with BET (slot already has charger → no infra cost)
     sc_repl_bet = compute_step_cost(tech=0, age=5.0, action=2,
-                                    annual_km=annual_km, mileage=annual_km*5, cfg=cfg)
+                                    annual_km=annual_km, mileage=annual_km*5, cfg=cfg,
+                                    has_charger=True, n_charger=1)
     check("replace→BET → capex_gross > ICT capex",
           sc_repl_bet.capex_gross > sc_repl_ict.capex_gross,
           f"BET={sc_repl_bet.capex_gross:.0f}  ICT={sc_repl_ict.capex_gross:.0f}")
+    check("replace→BET (has_charger=True) → infra_cost == 0",
+          sc_repl_bet.infra_cost == 0.0,
+          f"got {sc_repl_bet.infra_cost:.0f}")
+
+    # Infrastructure cost: first BET ever (n_charger=0, no charger at slot)
+    sc_first_bet = compute_step_cost(tech=0, age=5.0, action=2,
+                                     annual_km=annual_km, mileage=annual_km*5, cfg=cfg,
+                                     has_charger=False, n_charger=0)
+    expected_first = cfg.construction_cost_contrib + cfg.charger_price
+    check(f"first BET (n_charger=0) → infra_cost == construction + charger ({expected_first:,.0f})",
+          sc_first_bet.infra_cost == expected_first,
+          f"got {sc_first_bet.infra_cost:.0f}")
+
+    # Infrastructure cost: subsequent BET (n_charger=5, no charger at slot)
+    sc_next_bet = compute_step_cost(tech=0, age=5.0, action=2,
+                                    annual_km=annual_km, mileage=annual_km*5, cfg=cfg,
+                                    has_charger=False, n_charger=5)
+    check(f"subsequent BET (n_charger=5) → infra_cost == charger_price ({cfg.charger_price:,.0f})",
+          sc_next_bet.infra_cost == cfg.charger_price,
+          f"got {sc_next_bet.infra_cost:.0f}")
+
+    # Infrastructure cost: depot full (n_charger=10)
+    sc_full_depot = compute_step_cost(tech=0, age=5.0, action=2,
+                                      annual_km=annual_km, mileage=annual_km*5, cfg=cfg,
+                                      has_charger=False, n_charger=10)
+    check("BET with n_charger=10 → infra_cost == 0",
+          sc_full_depot.infra_cost == 0.0,
+          f"got {sc_full_depot.infra_cost:.0f}")
 
     # Keep BET (age 3)
     sc_keep_bet = compute_step_cost(tech=1, age=3.0, action=0,
@@ -191,8 +222,12 @@ try:
     for k, v in sc_repl_ict.as_dict().items():
         print(f"    {k:<20}: €{v:>12,.0f}")
 
-    print(f"\n  Cost breakdown — replace→BET (age 5):")
+    print(f"\n  Cost breakdown — replace→BET (age 5, has_charger=True):")
     for k, v in sc_repl_bet.as_dict().items():
+        print(f"    {k:<20}: €{v:>12,.0f}")
+
+    print(f"\n  Cost breakdown — replace→BET first ever (n_charger=0, has_charger=False):")
+    for k, v in sc_first_bet.as_dict().items():
         print(f"    {k:<20}: €{v:>12,.0f}")
 
 except Exception as e:
@@ -213,14 +248,14 @@ try:
 
     obs, info = env.reset(seed=42)
     n = env.cfg.mdp.n_vehicles
-    expected_obs_shape = (n * 3 + 1,)
+    expected_obs_shape = (n * 3 + 2,)
     check(f"obs shape == {expected_obs_shape}", obs.shape == expected_obs_shape,
           f"got {obs.shape}")
     check("obs values in [0, 1]",
           float(obs.min()) >= 0.0 and float(obs.max()) <= 1.0,
           f"min={obs.min():.3f}  max={obs.max():.3f}")
     check("info has expected keys",
-          {"step","mean_age","mean_mileage","n_bet","n_ict"} <= set(info.keys()))
+          {"step","mean_age","mean_mileage","n_bet","n_ict","n_charger"} <= set(info.keys()))
 
     # Step: keep all
     action_keep = np.zeros(n, dtype=np.int32)
@@ -239,6 +274,8 @@ try:
           f"reward = {rew3:,.0f}")
     check("replace all BET → n_bet == n_vehicles after step",
           info3["n_bet"] == n, f"n_bet={info3['n_bet']}, n={n}")
+    check("replace all BET → n_charger == n_vehicles after step",
+          info3["n_charger"] == n, f"n_charger={info3['n_charger']}, n={n}")
 
     # Full episode: runs to truncation at planning_horizon
     env.reset(seed=0)
