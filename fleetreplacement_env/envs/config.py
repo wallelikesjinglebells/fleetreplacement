@@ -23,8 +23,10 @@ class CostConfig:
 
     # --- countries.csv ---
 
-    diesel_price: float 
+    diesel_price: float
     energy_price: float
+    construction_cost_contrib: float
+    charger_price: float
     toll_ict: float
     toll_bet: float
     driver_wage: float
@@ -142,6 +144,8 @@ def load_cost_config(
         # --- countries.csv ---
         diesel_price = get_float(de, "diesel_price"),
         energy_price = get_float(de, "energy_price"),
+        construction_cost_contrib = get_float(de, "construction_cost_contrib"),
+        charger_price = get_float(de, "charger_price"),
         toll_ict = get_float(de, "toll_ict"),
         toll_bet = get_float(de, "toll_bet"),
         driver_wage = get_float(de, "driver_wage"),
