@@ -26,6 +26,7 @@ class StepCost:
     """
     # CAPEX (replacement year only)
     capex_gross: float = 0.0        # purchase price of new vehicle (incl. battery for BET)
+    infra_cost: float = 0.0         # charging infrastructure (construction + charger, or charger only)
     subsidy: float = 0.0            # subsidy received on new BET (positive → reduces cost)
     salvage_revenue: float = 0.0    # current market value of retired vehicle (positive → reduces cost)
 
@@ -42,8 +43,8 @@ class StepCost:
 
     @property
     def capex_net(self) -> float:
-        """Net capital outlay: gross CAPEX minus subsidy and salvage of old vehicle"""
-        return self.capex_gross - self.subsidy - self.salvage_revenue
+        """Net capital outlay: gross CAPEX plus infrastructure, minus subsidy and salvage of old vehicle"""
+        return self.capex_gross + self.infra_cost - self.subsidy - self.salvage_revenue
 
     @property
     def opex_total(self) -> float:
@@ -62,6 +63,7 @@ class StepCost:
         """Utility method for conversion into dictionary for debugging"""
         return {
             "capex_gross": self.capex_gross,
+            "infra_cost": self.infra_cost,
             "subsidy": -self.subsidy,           # displayed as negative (saving)
             "salvage_revenue": -self.salvage_revenue,  # displayed as negative (saving)
             "fuel_energy": self.fuel_energy,
@@ -202,20 +204,24 @@ def compute_replacement_cost(
     old_age: float,
     annual_km: float,
     cfg: CostConfig,
+    has_charger: bool = True,
+    n_charger: int = 0,
     ps: Optional[PriceState] = None,
 ) -> StepCost:
     """
     Lump-sum cost for replacing a vehicle in the current timestep
 
     Parameters
-    new_tech  : 0 = ICT, 1 = BET
-    old_tech  : technology of the vehicle being retired
-    old_age   : age of the vehicle being retired, in years
-    cfg       : CostConfig (Germany, manual drivetrain)
-    ps        : optional stochastic price overrides
+    new_tech    : 0 = ICT, 1 = BET
+    old_tech    : technology of the vehicle being retired
+    old_age     : age of the vehicle being retired, in years
+    cfg         : CostConfig (Germany, manual drivetrain)
+    has_charger : True if this vehicle slot already has a charger installed
+    n_charger   : number of charger slots installed in the fleet before this purchase
+    ps          : optional stochastic price overrides
 
     Returns
-    StepCost 
+    StepCost
     """
     cost = StepCost()
 
@@ -228,6 +234,12 @@ def compute_replacement_cost(
         capex_bat = _battery_cost(cfg, ps)
         cost.capex_gross = capex_truck + capex_bat
         cost.subsidy = _bet_subsidy(cfg, cost.capex_gross, ps)
+
+        if not has_charger:
+            if n_charger == 0:
+                cost.infra_cost = cfg.construction_cost_contrib + cfg.charger_price
+            elif n_charger < 10:
+                cost.infra_cost = cfg.charger_price
 
     cost.salvage_revenue = _market_value(old_tech, old_age, cfg, ps)    # Winkelmann: eq. (15), age-dependent sales price is accounted for in state cost calculation
 
@@ -331,18 +343,23 @@ def compute_step_cost(
     annual_km: float,
     cfg: CostConfig,
     mileage: float,
+    has_charger: bool = True,
+    n_charger: int = 0,
     ps: Optional[PriceState] = None,
 ) -> StepCost:
     """
     Unified entry point for fleet_replacement.py step()
 
     Parameters
-    tech       : current vehicle technology (0=ICT, 1=BET)
-    age        : current vehicle age in years
-    action     : 0=keep, 1=replace with ICT, 2=replace with BET
-    annual_km  : km driven this step, uses cfg.akt_base as default
-    cfg        : CostConfig
-    ps         : optional stochastic price overrides
+    tech        : current vehicle technology (0=ICT, 1=BET)
+    age         : current vehicle age in years
+    action      : 0=keep, 1=replace with ICT, 2=replace with BET
+    annual_km   : km driven this step, uses cfg.akt_base as default
+    cfg         : CostConfig
+    mileage     : current vehicle odometer reading in km
+    has_charger : True if this vehicle slot already has a charger installed
+    n_charger   : number of charger slots installed in the fleet before this purchase
+    ps          : optional stochastic price overrides
 
     Returns
     StepCost (.total gives the scalar cost in fleet_replacement.py)
@@ -355,5 +372,6 @@ def compute_step_cost(
         )
     else:  # action == 2
         return compute_replacement_cost(
-            new_tech=1, old_tech=int(tech), old_age=age, annual_km=annual_km, cfg=cfg, ps=ps
+            new_tech=1, old_tech=int(tech), old_age=age, annual_km=annual_km, cfg=cfg,
+            has_charger=has_charger, n_charger=n_charger, ps=ps
         )
