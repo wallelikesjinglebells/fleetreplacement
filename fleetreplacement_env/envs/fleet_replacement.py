@@ -29,10 +29,10 @@ class FleetReplacementEnv(gym.Env):
         n_vehicles = self.cfg.mdp.n_vehicles
         
         # State space as box, matrix of shape (n_vehicles, 3 (technology, age, mileage))
-        # After including current_step in state space: vector with n_vehicles*3+1 elements
+        # After including current_step and n_charger: vector with n_vehicles*3+2 elements
         self.observation_space = spaces.Box(
-            low  = np.zeros(n_vehicles * 3 + 1, dtype=np.float32),                                                                                
-            high = np.ones( n_vehicles * 3 + 1, dtype=np.float32),
+            low  = np.zeros(n_vehicles * 3 + 2, dtype=np.float32),
+            high = np.ones( n_vehicles * 3 + 2, dtype=np.float32),
             dtype = np.float32
         )
 
@@ -47,11 +47,12 @@ class FleetReplacementEnv(gym.Env):
     def _get_obs(self):
         tech = self.fleet_state[:, 0]
         age = self.fleet_state[:, 1] / self.cfg.mdp.max_vehicle_age                                          # normalize
-        # mileage = self.fleet_state[:, 2] / self.cfg.mdp.max_mileage 
+        # mileage = self.fleet_state[:, 2] / self.cfg.mdp.max_mileage
         mileage = self.fleet_state[:, 2] / self.cfg.mdp.max_possible_lifetime_km                          # normalize using max_possible_lifetime_km
-        flat_fleet = np.stack([tech, age, mileage], axis=1).flatten().astype(np.float32)        
+        flat_fleet = np.stack([tech, age, mileage], axis=1).flatten().astype(np.float32)
         step_feature = np.array([self.current_step / self.cfg.mdp.planning_horizon], dtype=np.float32)       # normalize
-        return np.concatenate([flat_fleet, step_feature])
+        charger_feature = np.array([self.charger_slots.sum() / self.cfg.mdp.n_vehicles], dtype=np.float32)   # normalize
+        return np.concatenate([flat_fleet, step_feature, charger_feature])
     
     def _get_info(self):
         return {
@@ -60,12 +61,14 @@ class FleetReplacementEnv(gym.Env):
             "mean_mileage": float(self.fleet_state[:, 2].mean()),
             "n_bet": int((self.fleet_state[:, 0] == 1).sum()),
             "n_ict":  int((self.fleet_state[:, 0] == 0).sum()),
+            "n_charger": int(self.charger_slots.sum()),
         }
     
     # Reset function, starts new episode
     def reset(self, seed: int | None = None, options: dict | None = None):
         super().reset(seed=seed)
         self.current_step = 0
+        self.charger_slots = np.zeros(self.cfg.mdp.n_vehicles, dtype=bool)
 
         # Initialize age
         max_init_age = int(self.cfg.cost.max_lifetime_km / self.cfg.cost.akt_base) - 1                            # computes the highest safe age to initialize; -1 ensures vehicle still has one full year of operation left before hitting force-replace threshold
@@ -116,15 +119,19 @@ class FleetReplacementEnv(gym.Env):
                 annual_km=self.cfg.cost.akt_base,
                 mileage=mileage,
                 cfg=self.cfg.cost,
+                has_charger=bool(self.charger_slots[i]),
+                n_charger=int(self.charger_slots.sum()),
             )
             total_cost += cost_item.total
 
             # Update fleet state after cost is computed
-            if act == 0:  # keep
+            if act == 0:    # keep
                 self.fleet_state[i] = [tech, age + 1, mileage + self.cfg.cost.akt_base]
-            else:         # replace with ICT (act=1) or BET (act=2)
-                new_tech = 0.0 if act == 1 else 1.0
-                self.fleet_state[i] = [new_tech, 1.0, self.cfg.cost.akt_base]      # assupmtion: new vehicle does operate in the year of purchase in this model
+            elif act == 1:  # replace with ICT
+                self.fleet_state[i] = [0.0, 1.0, self.cfg.cost.akt_base]
+            else:           # replace with BET (act=2)
+                self.fleet_state[i] = [1.0, 1.0, self.cfg.cost.akt_base]
+                self.charger_slots[i] = True
 
         # Dicsount cost
         discount = 1.0 / (1.0 + self.cfg.cost.i_rate) ** self.current_step
