@@ -101,6 +101,9 @@ class CostConfig:
     # ICT ban year
     ict_ban_year: int
 
+    # Battery replacement age (years)
+    battery_replacement_age: int
+
     # Omitted
     # ee_energy_factor: float     # only activates for automated truck with EE in name
     # ro_energy_factor: float     # only activates for automated truck with RO in name            
@@ -198,6 +201,7 @@ def load_cost_config(
         residual_bet_truck_perc = get_float(scen, "residual_bet_truck_perc"),
         residual_bat_perc = get_float(scen, "residual_bat_perc"),
         ict_ban_year = int(get_float(scen, "ict_ban_year")),
+        battery_replacement_age = int(get_float(scen, "battery_replacement_age")),
 
     )
 

@@ -328,9 +328,7 @@ def compute_opex(
         cost.tax = cfg.tax * cfg.tax_factor                             # adapted from Clara: class BET → self.cost_breakdown["Tax"]
 
         # Mid-life battery replacement
-        midpoint = cfg.max_lifetime_km / 2.0
-        new_mileage = mileage + annual_km
-        if mileage < midpoint <= new_mileage:
+        if age == cfg.battery_replacement_age:
             cost.battery_replacement = _battery_cost(cfg, ps)
 
     return cost
