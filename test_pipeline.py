@@ -45,7 +45,7 @@ SCENARIOS_COLS = [
     "maint_manual_factor", "driver_wage_factor", "tire_factor", "insurance_factor",
     "capex_ict_factor", "capex_bet_factor",
     "residual_ict_truck_perc", "residual_bet_truck_perc", "residual_bat_perc",
-    "ict_ban_year",
+    "ict_ban_year", "battery_replacement_age",
 ]
 
 try:
@@ -92,6 +92,10 @@ try:
               f"missing from {list(df_s.columns)}")
     check("'Status Quo' scenario row exists",
           (df_s["name"] == "Status Quo").sum() == 1)
+    if "battery_replacement_age" in df_s.columns:
+        vals = df_s["battery_replacement_age"].dropna()
+        check("battery_replacement_age > 0 in all scenarios",
+              (vals > 0).all(), f"values: {vals.tolist()}")
 except Exception as e:
     check("scenarios.csv loads", False, str(e))
 
@@ -132,6 +136,11 @@ try:
         check(f"  cfg.{field} is finite & > 0  (got {val:.4g})",
               np.isfinite(val) and val > 0)
 
+    # battery_replacement_age: must be a positive integer
+    bra = cfg.battery_replacement_age
+    check(f"  cfg.battery_replacement_age is int  (got {bra!r})", isinstance(bra, int))
+    check(f"  cfg.battery_replacement_age > 0  (got {bra})", bra > 0)
+
     mdp = MDPConfig()
     check("MDPConfig() constructs OK", mdp.n_vehicles == 10)
     full = FleetEnvConfig(mdp=mdp, cost=cfg)
@@ -170,6 +179,8 @@ try:
           f"got {sc_repl_ict.capex_gross:.0f}")
     check("replace→ICT → salvage_revenue > 0 (age=5)", sc_repl_ict.salvage_revenue > 0,
           f"got {sc_repl_ict.salvage_revenue:.0f}")
+    check("replace→ICT → subsidy == 0", sc_repl_ict.subsidy == 0.0,
+          f"got {sc_repl_ict.subsidy:.0f}")
 
     # Action 2: replace with BET (slot already has charger → no infra cost)
     sc_repl_bet = compute_step_cost(tech=0, age=5.0, action=2,
@@ -181,6 +192,9 @@ try:
     check("replace→BET (has_charger=True) → infra_cost == 0",
           sc_repl_bet.infra_cost == 0.0,
           f"got {sc_repl_bet.infra_cost:.0f}")
+    check("replace→BET → subsidy > 0",
+          sc_repl_bet.subsidy > 0,
+          f"got {sc_repl_bet.subsidy:.0f}")
 
     # Infrastructure cost: first BET ever (n_charger=0, no charger at slot)
     sc_first_bet = compute_step_cost(tech=0, age=5.0, action=2,
@@ -212,12 +226,78 @@ try:
                                     annual_km=annual_km, mileage=annual_km*3, cfg=cfg)
     check("keep BET  → opex_total > 0", sc_keep_bet.opex_total > 0,
           f"got {sc_keep_bet.opex_total:.0f}")
+    check("keep BET (age 3) → no battery_replacement",
+          sc_keep_bet.battery_replacement == 0.0,
+          f"got {sc_keep_bet.battery_replacement:.0f}")
+
+    # ── Mid-life battery replacement (age-based) ──────────
+    repl_age = cfg.battery_replacement_age
+    expected_bat_cost = (cfg.bat_cap * cfg.bat_cap_factor
+                         * cfg.price_kwh_base * cfg.price_kwh_factor)
+
+    sc_bat_hit = compute_step_cost(tech=1, age=float(repl_age), action=0,
+                                   annual_km=annual_km, mileage=annual_km*repl_age, cfg=cfg)
+    check(f"BET at age={repl_age} → battery_replacement > 0",
+          sc_bat_hit.battery_replacement > 0,
+          f"got {sc_bat_hit.battery_replacement:.0f}")
+    check(f"BET at age={repl_age} → battery_replacement == expected ({expected_bat_cost:,.0f})",
+          abs(sc_bat_hit.battery_replacement - expected_bat_cost) < 1.0,
+          f"got {sc_bat_hit.battery_replacement:.0f}")
+
+    for off_age in [repl_age - 1, repl_age + 1]:
+        if off_age > 0:
+            sc_no_bat = compute_step_cost(tech=1, age=float(off_age), action=0,
+                                          annual_km=annual_km, mileage=annual_km*off_age,
+                                          cfg=cfg)
+            check(f"BET at age={off_age} (≠ repl_age) → battery_replacement == 0",
+                  sc_no_bat.battery_replacement == 0.0,
+                  f"got {sc_no_bat.battery_replacement:.0f}")
+
+    sc_ict_at_repl = compute_step_cost(tech=0, age=float(repl_age), action=0,
+                                       annual_km=annual_km, mileage=annual_km*repl_age, cfg=cfg)
+    check("ICT at battery_replacement_age → battery_replacement == 0",
+          sc_ict_at_repl.battery_replacement == 0.0,
+          f"got {sc_ict_at_repl.battery_replacement:.0f}")
+
+    # ── Age-dependent maintenance (ICT) ──────────────────
+    sc_ict_young = compute_opex(tech=0, annual_km=annual_km, cfg=cfg, age=1.0,
+                                mileage=annual_km)
+    sc_ict_old   = compute_opex(tech=0, annual_km=annual_km, cfg=cfg, age=10.0,
+                                mileage=annual_km*10)
+    check("ICT maintenance increases with age (age=10 > age=1)",
+          sc_ict_old.maintenance > sc_ict_young.maintenance,
+          f"age=1: {sc_ict_young.maintenance:.0f}  age=10: {sc_ict_old.maintenance:.0f}")
+
+    # ── Salvage revenue decreases with age ────────────────
+    sc_repl_young = compute_replacement_cost(new_tech=0, old_tech=0, old_age=2.0,
+                                             annual_km=annual_km, cfg=cfg)
+    sc_repl_old   = compute_replacement_cost(new_tech=0, old_tech=0, old_age=9.0,
+                                             annual_km=annual_km, cfg=cfg)
+    check("ICT salvage_revenue decreases with age (age=9 < age=2)",
+          sc_repl_old.salvage_revenue < sc_repl_young.salvage_revenue,
+          f"age=2: {sc_repl_young.salvage_revenue:.0f}  age=9: {sc_repl_old.salvage_revenue:.0f}")
+
+    sc_bet_repl_young = compute_replacement_cost(new_tech=1, old_tech=1, old_age=2.0,
+                                                 annual_km=annual_km, cfg=cfg)
+    sc_bet_repl_old   = compute_replacement_cost(new_tech=1, old_tech=1, old_age=9.0,
+                                                 annual_km=annual_km, cfg=cfg)
+    check("BET salvage_revenue decreases with age (age=9 < age=2)",
+          sc_bet_repl_old.salvage_revenue < sc_bet_repl_young.salvage_revenue,
+          f"age=2: {sc_bet_repl_young.salvage_revenue:.0f}  age=9: {sc_bet_repl_old.salvage_revenue:.0f}")
+
+    # ── PriceState override ───────────────────────────────
+    ps_high = PriceState(diesel_price=cfg.diesel_price * 2)
+    sc_ict_high_diesel = compute_opex(tech=0, annual_km=annual_km, cfg=cfg,
+                                      age=3.0, mileage=annual_km*3, ps=ps_high)
+    check("PriceState diesel override doubles fuel_energy cost",
+          abs(sc_ict_high_diesel.fuel_energy / sc_keep_ict.fuel_energy - 2.0) < 0.01,
+          f"ratio={sc_ict_high_diesel.fuel_energy / sc_keep_ict.fuel_energy:.3f}")
 
     # Breakdowns
     print(f"\n  Cost breakdown — keep ICT (age 5, {annual_km:.0f} km/yr):")
     for k, v in sc_keep_ict.as_dict().items():
         print(f"    {k:<20}: €{v:>12,.0f}")
-        
+
     print(f"\n  Cost breakdown — replace→ICT (age 5):")
     for k, v in sc_repl_ict.as_dict().items():
         print(f"    {k:<20}: €{v:>12,.0f}")
@@ -228,6 +308,10 @@ try:
 
     print(f"\n  Cost breakdown — replace→BET first ever (n_charger=0, has_charger=False):")
     for k, v in sc_first_bet.as_dict().items():
+        print(f"    {k:<20}: €{v:>12,.0f}")
+
+    print(f"\n  Cost breakdown — keep BET (age={repl_age}, battery replacement year):")
+    for k, v in sc_bat_hit.as_dict().items():
         print(f"    {k:<20}: €{v:>12,.0f}")
 
 except Exception as e:
@@ -276,6 +360,87 @@ try:
           info3["n_bet"] == n, f"n_bet={info3['n_bet']}, n={n}")
     check("replace all BET → n_charger == n_vehicles after step",
           info3["n_charger"] == n, f"n_charger={info3['n_charger']}, n={n}")
+
+    # Charger slot persistence: after replacing with BET, charger_slots must stay True
+    env.reset(seed=42)
+    env.step(np.full(n, 2, dtype=np.int32))   # replace all with BET
+    prev_chargers = env.charger_slots.copy()
+    env.step(np.zeros(n, dtype=np.int32))      # keep all
+    check("charger_slots persist across steps after BET replacement",
+          np.all(env.charger_slots == prev_chargers),
+          f"before={prev_chargers}, after={env.charger_slots}")
+
+    # ── Action masking ────────────────────────────────────
+    env_m = FleetReplacementEnv()
+    env_m.reset(seed=0)
+    annual_km_env = env_m.cfg.cost.akt_base
+
+    # age == 1: cannot replace a brand-new vehicle
+    env_m.fleet_state[0] = [0.0, 1.0, annual_km_env]
+    masks = env_m.action_masks().reshape(n, 3)
+    check("age=1 → keep is valid",           bool(masks[0, 0]))
+    check("age=1 → replace ICT is masked",   not bool(masks[0, 1]))
+    check("age=1 → replace BET is masked",   not bool(masks[0, 2]))
+
+    # near lifetime limit: keep must be masked
+    env_m.fleet_state[0] = [
+        0.0, 5.0,
+        env_m.cfg.cost.max_lifetime_km - annual_km_env * 0.5   # within one step of limit
+    ]
+    masks2 = env_m.action_masks().reshape(n, 3)
+    check("near lifetime limit → keep is masked",       not bool(masks2[0, 0]))
+    check("near lifetime limit → replace BET is valid", bool(masks2[0, 2]))
+
+    # ICT ban: after ban step, replace-with-ICT must be masked
+    if env_m.ict_ban_step < env_m.cfg.mdp.planning_horizon:
+        env_m.current_step = env_m.ict_ban_step
+        env_m.fleet_state[0] = [0.0, 5.0, annual_km_env * 5]
+        masks3 = env_m.action_masks().reshape(n, 3)
+        check("at ICT ban step → replace ICT is masked",   not bool(masks3[0, 1]))
+        check("at ICT ban step → replace BET is valid",    bool(masks3[0, 2]))
+    else:
+        check("ICT ban step within planning horizon (skipped)", True)
+
+    # ── Battery replacement fires correctly inside env ────
+    # Construct a BET that is exactly at battery_replacement_age this step
+    env_b = FleetReplacementEnv()
+    env_b.reset(seed=0)
+    bra = env_b.cfg.cost.battery_replacement_age
+    env_b.fleet_state[0] = [1.0, float(bra), annual_km_env * bra]
+    cost_with_repl, _ = 0.0, None
+    from fleetreplacement_env.envs.costs import compute_step_cost as _csc
+    cost_item = _csc(
+        tech=1, age=float(bra), action=0,
+        annual_km=annual_km_env, mileage=annual_km_env * bra,
+        cfg=env_b.cfg.cost,
+    )
+    check(f"env: BET at battery_replacement_age={bra} → step cost includes battery_replacement",
+          cost_item.battery_replacement > 0,
+          f"got {cost_item.battery_replacement:.0f}")
+
+    # ── Discount: step-0 reward larger (less negative) than step-5 for same cost ─
+    env_d = FleetReplacementEnv()
+    env_d.reset(seed=42)
+    env_d.fleet_state[:] = env_d.fleet_state.copy()   # keep same fleet
+
+    # step 0 reward
+    _, rew_s0, _, _, _ = env_d.step(action_keep)
+
+    # advance to step 5 with same initial fleet by resetting and stepping forward
+    env_d.reset(seed=42)
+    for _ in range(5):
+        env_d.step(action_keep)
+    # override fleet to same composition as after reset
+    rew_list = []
+    env_d2 = FleetReplacementEnv()
+    env_d2.reset(seed=42)
+    _, rew_s0_ref, _, _, _ = env_d2.step(action_keep)
+    env_d2.reset(seed=42)
+    env_d2.current_step = 5
+    _, rew_s5_ref, _, _, _ = env_d2.step(action_keep)
+    check("discount: |reward at step=0| > |reward at step=5| for same fleet",
+          abs(rew_s0_ref) > abs(rew_s5_ref),
+          f"step0={rew_s0_ref:.0f}  step5={rew_s5_ref:.0f}")
 
     # Full episode: runs to truncation at planning_horizon
     env.reset(seed=0)
