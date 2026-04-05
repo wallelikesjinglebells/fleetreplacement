@@ -67,12 +67,13 @@ model = MaskablePPO(
     env=vec_env,
     verbose=1,
     learning_rate=3e-4,
-    n_steps=2048,           # no. of steps each env collects before policy update, results in total n_steps x n_envs number of transitions       
+    n_steps=2048,           # no. of steps each env collects before policy update, results in total n_steps x n_envs number of transitions
     batch_size=64,
     n_epochs=10,
     gamma=1.0,              # env already applies economic discounting in reward, no additional discounting needed
     tensorboard_log=LOG_DIR,
     ent_coef=0.01,          # entropy coefficient for loss calculation (PPO is rewarded for exploring all actions)
+    policy_kwargs=dict(net_arch=[256, 256]),  # larger network than default [64, 64] for 22-dim obs and 3^10 action space
 )
 
 # Train
