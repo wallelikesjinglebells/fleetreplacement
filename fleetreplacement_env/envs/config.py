@@ -10,8 +10,7 @@ import ast
 class MDPConfig:
     # MDP parameters with default values
     n_vehicles: int = 10            # fleet size
-    max_vehicle_age: int = 12       # max truck age in years before forced retirement, slightly looser than km (km is primary signal)
-    # max_mileage: int = 1_500_000      # max truck mileage in km before forced retirement (now: max_lifetime_km)
+    max_possible_vehicle_age: int = 0       # max max_vehicle_age across all scenarios, used for obs normalization; set via load_max_vehicle_age()
     max_possible_lifetime_km: float = 0.0   # max max_lifetime_km across all scenarios, used for obs normalization; set via load_max_lifetime_km()
     planning_horizon: int = 20      # planning time horizon in years (when is one training episode over?)
     start_year: int = 2026          # current year (needed for calculating ICT purchase ban step)
@@ -104,6 +103,9 @@ class CostConfig:
     # Battery replacement age (years)
     battery_replacement_age: int
 
+    # Max vehicle age before forced retirement (years)
+    max_vehicle_age: int
+
     # Omitted
     # ee_energy_factor: float     # only activates for automated truck with EE in name
     # ro_energy_factor: float     # only activates for automated truck with RO in name            
@@ -183,6 +185,7 @@ def load_cost_config(
         efficiency_factor_ict = get_float(scen, "efficiency_factor_ict"),
         efficiency_factor_bet = get_float(scen, "efficiency_factor_bet"),
         max_lifetime_km = get_float(scen, "max_lifetime_km"),
+        max_vehicle_age = int(get_float(scen, "max_vehicle_age")),
         subsidy_fallback_perc = get_float(scen, "subsidy_fallback_perc"),
         subsidy_fallback_max = get_float(scen, "subsidy_fallback_max"),
         diesel_price_factor = get_float(scen, "diesel_price_factor"),
@@ -215,3 +218,14 @@ def load_max_lifetime_km(
     """
     df = pd.read_csv(scenarios_path, sep=";", decimal=",")
     return float(df["max_lifetime_km"].max())
+
+def load_max_vehicle_age(
+    scenarios_path: str | Path = "data/scenarios.csv",
+) -> int:
+    """
+    Helper function to read all rows of scenarios.csv
+    Returns the maximum max_vehicle_age across all scenarios
+    For use as a fixed normalization denominator in fleet_replacement.py
+    """
+    df = pd.read_csv(scenarios_path, sep=";", decimal=",")
+    return int(df["max_vehicle_age"].max())

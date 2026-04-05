@@ -1,7 +1,7 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config, load_max_lifetime_km
+from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config, load_max_lifetime_km, load_max_vehicle_age
 from fleetreplacement_env.envs.costs import compute_step_cost
 
 class FleetReplacementEnv(gym.Env):
@@ -13,13 +13,18 @@ class FleetReplacementEnv(gym.Env):
         # If no config is pased, build a default config by loading from CSV files
         if config is None:
             config = FleetEnvConfig(
-                mdp = MDPConfig(max_possible_lifetime_km=load_max_lifetime_km()),
+                mdp = MDPConfig(
+                    max_possible_lifetime_km=load_max_lifetime_km(),
+                    max_possible_vehicle_age=load_max_vehicle_age(),
+                ),
                 cost = load_cost_config()     # call loading config
             )
         self.cfg = config                     # holds self.cfg.mdp and self.cfg.cost
         # Assertion to catch case where MDPConfig() is constructed manually and max_possible_lifetime_km is not set
         assert self.cfg.mdp.max_possible_lifetime_km > 0, \
             "MDPConfig.max_possible_lifetime_km must be set — use load_max_lifetime_km()"
+        assert self.cfg.mdp.max_possible_vehicle_age > 0, \
+            "MDPConfig.max_possible_vehicle_age must be set — use load_max_vehicle_age()"
 
         self.current_step = 0
         self.fleet_state: np.ndarray | None = None  # represent unitialized state, for guard in step()
@@ -46,7 +51,7 @@ class FleetReplacementEnv(gym.Env):
     # Constructing observations for NN
     def _get_obs(self):
         tech = self.fleet_state[:, 0]
-        age = self.fleet_state[:, 1] / self.cfg.mdp.max_vehicle_age                                          # normalize
+        age = self.fleet_state[:, 1] / self.cfg.mdp.max_possible_vehicle_age                                  # normalize
         # mileage = self.fleet_state[:, 2] / self.cfg.mdp.max_mileage
         mileage = self.fleet_state[:, 2] / self.cfg.mdp.max_possible_lifetime_km                          # normalize using max_possible_lifetime_km
         flat_fleet = np.stack([tech, age, mileage], axis=1).flatten().astype(np.float32)
@@ -71,7 +76,10 @@ class FleetReplacementEnv(gym.Env):
         self.charger_slots = np.zeros(self.cfg.mdp.n_vehicles, dtype=bool)
 
         # Initialize age
-        max_init_age = int(self.cfg.cost.max_lifetime_km / self.cfg.cost.akt_base) - 1                            # computes the highest safe age to initialize; -1 ensures vehicle still has one full year of operation left before hitting force-replace threshold
+        max_init_age = min(
+            int(self.cfg.cost.max_lifetime_km / self.cfg.cost.akt_base),
+            self.cfg.cost.max_vehicle_age,
+        ) - 1                                                                                                       # highest safe age to initialize; -1 ensures vehicle still has one full year of operation left before hitting force-replace threshold
         ages = self.np_random.integers(1, max_init_age + 1, size=self.cfg.mdp.n_vehicles).astype(np.float32)      # generate random vehicle age; +1 allows max_init_age to be included in range (np is exclusive on upper bound); convert to float (as defined in obs space)
         # Initialize mileage
         mileages = ages * self.cfg.cost.akt_base                                                                  # starting mileage, derived from age
@@ -169,7 +177,7 @@ class FleetReplacementEnv(gym.Env):
 
             # Rule 2: Force replace if at lifetime limit
             must_replace = (
-                age + 1 >= self.cfg.mdp.max_vehicle_age
+                age + 1 >= self.cfg.cost.max_vehicle_age
                 or mileage + self.cfg.cost.akt_base >= self.cfg.cost.max_lifetime_km    # primary limit, see config.py
             )
             if must_replace:
