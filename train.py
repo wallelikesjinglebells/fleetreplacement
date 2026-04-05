@@ -7,20 +7,27 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import VecNormalize, DummyVecEnv
 from stable_baselines3.common.vec_env import sync_envs_normalization
+from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config
 
 
 # Configuration variables, tunable settings
+SCENARIO_NAME = "Status Quo"          # options: "Status Quo", "Scenario 1: Tech Stalemate",
+                                       #          "Scenario 2: Tech without Mandate",
+                                       #          "Scenario 3: Ambition meets Reality",
+                                       #          "Scenario 4: Autonomous Green Logistics"
 ENV_ID        = "FleetReplacement-v0"
-TOTAL_STEPS   = 5_000_000   # total number of environment steps to train (increase for real training)
-N_ENVS        = 4         # parallel environments for faster data collection
-EVAL_FREQ     = 10_000    # pause training every EVAL_FREQ steps to evaluate current policy on eval_env
-LOG_DIR       = "./logs/"
-SAVE_PATH     = "./models/ppo_fleet"
+TOTAL_STEPS   = 5_000_000             # total number of environment steps to train
+N_ENVS        = 4                     # parallel environments for faster data collection
+EVAL_FREQ     = 10_000                # pause training every EVAL_FREQ steps to evaluate current policy on eval_env
+_scenario_tag = SCENARIO_NAME.replace(" ", "_").replace(":", "")
+LOG_DIR       = f"./logs/{_scenario_tag}/"
+SAVE_PATH     = f"./models/ppo_fleet_{_scenario_tag}"
 
-# Wrap env with ActionMasker
+# Wrap env with ActionMasker, loading the correct scenario config
 def make_masked_env():
-    env = gym.make(ENV_ID)
-    env = ActionMasker(env, lambda e: e.unwrapped.action_masks())  # lambda tells SB3 where to find masks
+    cfg = FleetEnvConfig(mdp=MDPConfig(), cost=load_cost_config(scenario_name=SCENARIO_NAME))
+    env = gym.make(ENV_ID, config=cfg)
+    env = ActionMasker(env, lambda e: e.unwrapped.action_masks())
     return env
 
 # Create vectorized environment for all N_ENVS environments
