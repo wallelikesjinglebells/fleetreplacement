@@ -208,6 +208,7 @@ def load_cost_config(
 
     )
 
+# --- NOT NEEDED ANYMORE, BUT KEPT IN CASE FOR FUTURE USE ---
 def load_max_lifetime_km(
     scenarios_path: str | Path = "data/scenarios.csv",
 ) -> float:

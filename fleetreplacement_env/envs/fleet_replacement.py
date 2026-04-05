@@ -1,7 +1,7 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config, load_max_lifetime_km, load_max_vehicle_age
+from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config
 from fleetreplacement_env.envs.costs import compute_step_cost
 
 class FleetReplacementEnv(gym.Env):
@@ -14,17 +14,19 @@ class FleetReplacementEnv(gym.Env):
         if config is None:
             config = FleetEnvConfig(
                 mdp = MDPConfig(
-                    max_possible_lifetime_km=load_max_lifetime_km(),
-                    max_possible_vehicle_age=load_max_vehicle_age(),
+                    # max_possible_lifetime_km and max_possible_vehicle_age were previously loaded here as fixed normalization denominators for the observation space (cross-scenario max)
+                    # Mileage is now normalized by the scenario-specific cfg.cost.max_lifetime_km instead
+                    # max_possible_lifetime_km=load_max_lifetime_km(),
+                    # max_possible_vehicle_age=load_max_vehicle_age(),
                 ),
                 cost = load_cost_config()     # call loading config
             )
         self.cfg = config                     # holds self.cfg.mdp and self.cfg.cost
-        # Assertion to catch case where MDPConfig() is constructed manually and max_possible_lifetime_km is not set
-        assert self.cfg.mdp.max_possible_lifetime_km > 0, \
-            "MDPConfig.max_possible_lifetime_km must be set — use load_max_lifetime_km()"
-        assert self.cfg.mdp.max_possible_vehicle_age > 0, \
-            "MDPConfig.max_possible_vehicle_age must be set — use load_max_vehicle_age()"
+        # Previously asserted that cross-scenario max normalization denominators were set, now obsolete since obs normalization uses scenario-specific cfg.cost.max_lifetime_km (see above)
+        # assert self.cfg.mdp.max_possible_lifetime_km > 0, \
+        #     "MDPConfig.max_possible_lifetime_km must be set — use load_max_lifetime_km()"
+        # assert self.cfg.mdp.max_possible_vehicle_age > 0, \
+        #     "MDPConfig.max_possible_vehicle_age must be set — use load_max_vehicle_age()"
 
         self.current_step = 0
         self.fleet_state: np.ndarray | None = None  # represent unitialized state, for guard in step()
@@ -33,11 +35,11 @@ class FleetReplacementEnv(gym.Env):
         # Unpack config calues
         n_vehicles = self.cfg.mdp.n_vehicles
         
-        # State space as box, matrix of shape (n_vehicles, 3 (technology, age, mileage))
-        # After including current_step and n_charger: vector with n_vehicles*3+2 elements
+        # State space as box, matrix of shape (n_vehicles, 2 (technology, mileage))
+        # After including current_step and n_charger: vector with n_vehicles*2+2 elements
         self.observation_space = spaces.Box(
-            low  = np.zeros(n_vehicles * 3 + 2, dtype=np.float32),
-            high = np.ones( n_vehicles * 3 + 2, dtype=np.float32),
+            low  = np.zeros(n_vehicles * 2 + 2, dtype=np.float32),
+            high = np.ones( n_vehicles * 2 + 2, dtype=np.float32),
             dtype = np.float32
         )
 
@@ -51,10 +53,9 @@ class FleetReplacementEnv(gym.Env):
     # Constructing observations for NN
     def _get_obs(self):
         tech = self.fleet_state[:, 0]
-        age = self.fleet_state[:, 1] / self.cfg.mdp.max_possible_vehicle_age                                  # normalize
-        # mileage = self.fleet_state[:, 2] / self.cfg.mdp.max_mileage
-        mileage = self.fleet_state[:, 2] / self.cfg.mdp.max_possible_lifetime_km                          # normalize using max_possible_lifetime_km
-        flat_fleet = np.stack([tech, age, mileage], axis=1).flatten().astype(np.float32)
+        # age = self.fleet_state[:, 1] / self.cfg.mdp.max_possible_vehicle_age                               # removed from obs: max_vehicle_age never triggers (km limit binds first)
+        mileage = self.fleet_state[:, 2] / self.cfg.cost.max_lifetime_km                                     # normalize by scenario-specific lifetime km cap
+        flat_fleet = np.stack([tech, mileage], axis=1).flatten().astype(np.float32)
         step_feature = np.array([self.current_step / self.cfg.mdp.planning_horizon], dtype=np.float32)       # normalize
         charger_feature = np.array([self.charger_slots.sum() / self.cfg.mdp.n_vehicles], dtype=np.float32)   # normalize
         return np.concatenate([flat_fleet, step_feature, charger_feature])
