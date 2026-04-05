@@ -361,7 +361,7 @@ def compute_step_cost(
     StepCost (.total gives the scalar cost in fleet_replacement.py)
     """
     if action == 0:
-        return compute_opex(tech=tech, annual_km=annual_km, cfg=cfg, age=age, mileage=mileage, ps=ps)
+        return compute_opex(tech=tech, annual_km=annual_km, cfg=cfg, age=age, ps=ps)
     elif action == 1:
         return compute_replacement_cost(
             new_tech=0, old_tech=int(tech), old_age=age, annual_km=annual_km, cfg=cfg, ps=ps
