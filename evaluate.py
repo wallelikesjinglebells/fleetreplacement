@@ -4,10 +4,10 @@ from sb3_contrib import MaskablePPO
 from sb3_contrib.common.wrappers import ActionMasker
 
 # Load the best saved model
-model = MaskablePPO.load("./models/ppo_fleet/best_model")
+model = MaskablePPO.load("./models/ppo_fleet_Status_Quo/best_model")
 
 env = gym.make("FleetReplacement-v0", render_mode="human")
-env = ActionMasker(env, lambda e: e.action_masks())
+env = ActionMasker(env, lambda e: e.unwrapped.action_masks())
 
 # obs, info = env.reset(seed=0)                                 # uncomment if fleet should stay the same
 obs, info = env.reset()                                         # random fleet composition
@@ -20,5 +20,5 @@ while not done:
     total_reward += reward
     done = terminated or truncated
 
-print(f"\nEpisode total reward: €{total_reward:,.0f}")
+print(f"\nEpisode total reward: EUR {total_reward:,.0f}")
 env.close()
