@@ -13,3 +13,6 @@ models/
 evaluate_ds.py
 deep_sets_extractor.py
 train_ds.py
+
+# TensorBoard Captures
+TensorBoard_shots/
