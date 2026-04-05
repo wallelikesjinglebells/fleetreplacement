@@ -273,11 +273,6 @@ def compute_opex(
 
     Cost components adapted from Winkelmann eq. (15) and Clara:
     fuel/energy, toll, maintenance, tires, driver (hours-based), insurance, tax.
-
-    FUTURE EXPANSIONS:
-        - CO2 carbon cost (Winkelmann: monetarized with stochastic carbon price)
-        - DONE Age-dependent maintenance scaling (maint_km is flat per km)
-        - DONE Battery degradation/mid-life battery replacement for BET
     """
     cost = StepCost()
     hours = annual_km / cfg.avg_speed  # driving hours per year
