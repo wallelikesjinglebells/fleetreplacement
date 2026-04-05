@@ -1,3 +1,4 @@
+import argparse
 import fleetreplacement_env  # triggers register() in __init__.py, is important for gym.make() although flagged as not accessed
 import gymnasium as gym
 from sb3_contrib import MaskablePPO
@@ -10,11 +11,19 @@ from stable_baselines3.common.vec_env import sync_envs_normalization
 from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config
 
 
+_SCENARIO_MAP = {
+    "SQ": "Status Quo",
+    "S1": "Scenario 1: Tech Stalemate",
+    "S2": "Scenario 2: Tech without Mandate",
+    "S3": "Scenario 3: Ambition meets Reality",
+    "S4": "Scenario 4: Autonomous Green Logistics",
+}
+parser = argparse.ArgumentParser()
+parser.add_argument("scenario", choices=_SCENARIO_MAP, help="Scenario key: SQ, S1, S2, S3, S4")
+args = parser.parse_args()
+
 # Configuration variables, tunable settings
-SCENARIO_NAME = "Status Quo"          # options: "Status Quo", "Scenario 1: Tech Stalemate",
-                                       #          "Scenario 2: Tech without Mandate",
-                                       #          "Scenario 3: Ambition meets Reality",
-                                       #          "Scenario 4: Autonomous Green Logistics"
+SCENARIO_NAME = _SCENARIO_MAP[args.scenario]
 ENV_ID        = "FleetReplacement-v0"
 TOTAL_STEPS   = 5_000_000             # total number of environment steps to train
 N_ENVS        = 4                     # parallel environments for faster data collection
