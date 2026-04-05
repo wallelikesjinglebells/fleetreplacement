@@ -85,7 +85,6 @@ class CostConfig:
     # OpEx scaling
     maint_factor: float  # maint_manual_factor
     driver_wage_factor: float
-    tire_factor: float
     insurance_factor: float
 
     # CapEx scaling
@@ -196,7 +195,6 @@ def load_cost_config(
         tax_factor = get_float(scen, "tax_factor"),
         maint_factor = get_float(scen, "maint_manual_factor"),
         driver_wage_factor = get_float(scen, "driver_wage_factor"),
-        tire_factor = get_float(scen, "tire_factor"),
         insurance_factor = get_float(scen, "insurance_factor"),
         capex_ict_factor = get_float(scen, "capex_ict_factor"),
         capex_bet_factor = get_float(scen, "capex_bet_factor"),
