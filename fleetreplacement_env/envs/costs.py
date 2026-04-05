@@ -260,7 +260,6 @@ def compute_opex(
     annual_km: float,
     cfg: CostConfig,
     age: float,
-    mileage: float,
     ps: Optional[PriceState] = None,
 ) -> StepCost:
     """
@@ -270,7 +269,6 @@ def compute_opex(
     tech       : 0 = ICT, 1 = BET
     annual_km  : km driven this year, pass cfg.akt_base as default from the env
     cfg        : CostConfig
-    mileage:   : total mileage of a vehicle, needed for mid-life check for BET battery replacement
     ps         : optional stochastic price overrides
 
     Cost components adapted from Winkelmann eq. (15) and Clara:
