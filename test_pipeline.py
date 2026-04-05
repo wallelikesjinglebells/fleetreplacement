@@ -146,6 +146,15 @@ try:
     full = FleetEnvConfig(mdp=mdp, cost=cfg)
     check("FleetEnvConfig() constructs OK", True)
 
+    # All scenarios load without error
+    scenario_names = pd.read_csv("data/scenarios.csv", sep=";", decimal=",")["name"].tolist()
+    for sname in scenario_names:
+        try:
+            load_cost_config(scenario_name=sname)
+            check(f"  load_cost_config('{sname}') OK", True)
+        except Exception as scen_e:
+            check(f"  load_cost_config('{sname}') OK", False, str(scen_e))
+
 except Exception as e:
     check("config.py / load_cost_config()", False, traceback.format_exc())
 
@@ -258,6 +267,13 @@ try:
           sc_ict_at_repl.battery_replacement == 0.0,
           f"got {sc_ict_at_repl.battery_replacement:.0f}")
 
+    # Newly replaced BET (age=0 in replacement year) must not trigger battery replacement
+    sc_new_bet = compute_step_cost(tech=1, age=0.0, action=0,
+                                   annual_km=annual_km, cfg=cfg)
+    check("BET at age=0 (replacement year) → battery_replacement == 0",
+          sc_new_bet.battery_replacement == 0.0,
+          f"got {sc_new_bet.battery_replacement:.0f}")
+
     # ── Age-dependent maintenance (ICT) ──────────────────
     sc_ict_young = compute_opex(tech=0, annual_km=annual_km, cfg=cfg, age=1.0)
     sc_ict_old   = compute_opex(tech=0, annual_km=annual_km, cfg=cfg, age=10.0)
@@ -338,6 +354,18 @@ try:
     check("info has expected keys",
           {"step","mean_age","mean_mileage","n_bet","n_ict","n_charger"} <= set(info.keys()))
 
+    # ── Initial fleet state after reset ──────────────────
+    tech_features = obs[0:2*n:2]   # obs layout: [tech_0, mileage_0, tech_1, mileage_1, ...]
+    check("reset → all vehicles start as ICT (tech features == 0.0)",
+          np.all(tech_features == 0.0),
+          f"tech features: {tech_features}")
+    ages = env.fleet_state[:, 1]
+    max_init_age = min(int(env.cfg.cost.max_lifetime_km / env.cfg.cost.akt_base),
+                       env.cfg.cost.max_vehicle_age) - 1
+    check(f"reset → all vehicle ages in [1, {max_init_age}]",
+          bool(np.all((ages >= 1) & (ages <= max_init_age))),
+          f"ages: {ages.tolist()}")
+
     # Step: keep all
     action_keep = np.zeros(n, dtype=np.int32)
     obs2, rew, term, trunc, info2 = env.step(action_keep)
@@ -357,6 +385,19 @@ try:
           info3["n_bet"] == n, f"n_bet={info3['n_bet']}, n={n}")
     check("replace all BET → n_charger == n_vehicles after step",
           info3["n_charger"] == n, f"n_charger={info3['n_charger']}, n={n}")
+    check("replace all BET → obs[-2] (charger share) == 1.0",
+          abs(float(obs3[-2]) - 1.0) < 1e-6,
+          f"got {obs3[-2]:.4f}")
+
+    # Replace half the fleet with BET: charger share == 0.5
+    env.reset(seed=42)
+    half = n // 2
+    action_half_bet = np.zeros(n, dtype=np.int32)
+    action_half_bet[:half] = 2
+    obs_half, _, _, _, _ = env.step(action_half_bet)
+    check(f"replace {half}/{n} with BET → obs[-2] (charger share) == {half/n:.2f}",
+          abs(float(obs_half[-2]) - half / n) < 1e-6,
+          f"got {obs_half[-2]:.4f}")
 
     # Charger slot persistence: after replacing with BET, charger_slots must stay True
     env.reset(seed=42)
@@ -398,6 +439,31 @@ try:
     else:
         check("ICT ban step within planning horizon (skipped)", True)
 
+    # age-based forced replacement: age + 1 >= max_vehicle_age, mileage well below km limit
+    env_m.current_step = 0
+    env_m.fleet_state[0] = [
+        0.0,
+        float(env_m.cfg.cost.max_vehicle_age - 1),  # triggers age branch of must_replace
+        annual_km_env * 2,                            # far below max_lifetime_km
+    ]
+    masks_age = env_m.action_masks().reshape(n, 3)
+    check("near max_vehicle_age (km ok) → keep is masked",       not bool(masks_age[0, 0]))
+    check("near max_vehicle_age (km ok) → replace BET is valid", bool(masks_age[0, 2]))
+
+    # Combined: lifetime limit + ICT ban active → only BET valid
+    if env_m.ict_ban_step < env_m.cfg.mdp.planning_horizon:
+        env_m.current_step = env_m.ict_ban_step
+        env_m.fleet_state[0] = [
+            0.0, 5.0,
+            env_m.cfg.cost.max_lifetime_km - annual_km_env * 0.5,  # within one step of km limit
+        ]
+        masks_combo = env_m.action_masks().reshape(n, 3)
+        check("force-replace + ICT ban → keep is masked",        not bool(masks_combo[0, 0]))
+        check("force-replace + ICT ban → replace ICT is masked", not bool(masks_combo[0, 1]))
+        check("force-replace + ICT ban → replace BET is valid",  bool(masks_combo[0, 2]))
+    else:
+        check("combined force-replace + ICT ban (no ban scenario, skipped)", True)
+
     # ── Battery replacement fires correctly inside env ────
     # Construct a BET that is exactly at battery_replacement_age this step
     env_b = FleetReplacementEnv()
@@ -413,6 +479,40 @@ try:
     check(f"env: BET at battery_replacement_age={bra} → step cost includes battery_replacement",
           cost_item.battery_replacement > 0,
           f"got {cost_item.battery_replacement:.0f}")
+
+    # ── ban_feature correctness ───────────────────────────
+    env_ban = FleetReplacementEnv()
+    obs_ban, _ = env_ban.reset(seed=0)
+    ph = env_ban.cfg.mdp.planning_horizon
+    expected_ban0 = min(1.0, env_ban.ict_ban_step / ph)
+    check(f"ban_feature at step=0 == {expected_ban0:.3f}",
+          abs(float(obs_ban[-1]) - expected_ban0) < 1e-6,
+          f"got {obs_ban[-1]:.4f}")
+
+    if env_ban.ict_ban_step < ph:
+        env_ban.current_step = env_ban.ict_ban_step
+        obs_at_ban = env_ban._get_obs()
+        check("ban_feature at step=ict_ban_step == 0.0",
+              float(obs_at_ban[-1]) == 0.0,
+              f"got {obs_at_ban[-1]:.4f}")
+        env_ban.current_step = env_ban.ict_ban_step + 1
+        obs_past_ban = env_ban._get_obs()
+        check("ban_feature one step past ict_ban_step stays 0.0",
+              float(obs_past_ban[-1]) == 0.0,
+              f"got {obs_past_ban[-1]:.4f}")
+    else:
+        check("ban_feature (no ban scenario) == 1.0 throughout",
+              float(obs_ban[-1]) == 1.0,
+              f"got {obs_ban[-1]:.4f}")
+
+    # ── Mileage normalization boundary ───────────────────
+    env_ml = FleetReplacementEnv()
+    env_ml.reset(seed=0)
+    env_ml.fleet_state[0, 2] = env_ml.cfg.cost.max_lifetime_km
+    obs_ml = env_ml._get_obs()
+    check("mileage feature == 1.0 when mileage == max_lifetime_km",
+          abs(float(obs_ml[1]) - 1.0) < 1e-6,
+          f"got {obs_ml[1]:.4f}")
 
     # ── Discount: step-0 reward larger (less negative) than step-5 for same cost ─
     env_d = FleetReplacementEnv()
@@ -477,22 +577,27 @@ try:
     from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
     check("SB3 / sb3_contrib imports OK", True)
 
+    from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config
+
     def _make_masked():
-        e = gym.make("FleetReplacement-v0")
+        cfg = FleetEnvConfig(mdp=MDPConfig(), cost=load_cost_config(scenario_name="Status Quo"))
+        e = gym.make("FleetReplacement-v0", config=cfg)
         return ActionMasker(e, lambda env: env.unwrapped.action_masks())
 
     vec_env = DummyVecEnv([_make_masked])
-    vec_env = VecNormalize(vec_env, norm_obs=False, norm_reward=True, gamma=0.99)
+    vec_env = VecNormalize(vec_env, norm_obs=False, norm_reward=True, gamma=1.0)
     check("DummyVecEnv + VecNormalize construct OK", True)
 
-    model = MaskablePPO("MlpPolicy", vec_env, verbose=0, n_steps=SMOKE_STEPS, batch_size=64)
+    model = MaskablePPO("MlpPolicy", vec_env, verbose=0, n_steps=SMOKE_STEPS, batch_size=64,
+                        gamma=1.0)
     check("MaskablePPO constructs OK", True)
 
     model.learn(total_timesteps=SMOKE_STEPS)
     check(f"model.learn({SMOKE_STEPS} steps) completes without error", True)
 
     # Verify predict() respects masks on a single obs
-    raw_env = gym.make("FleetReplacement-v0")
+    cfg_raw = FleetEnvConfig(mdp=MDPConfig(), cost=load_cost_config(scenario_name="Status Quo"))
+    raw_env = gym.make("FleetReplacement-v0", config=cfg_raw)
     raw_env = ActionMasker(raw_env, lambda env: env.unwrapped.action_masks())
     obs, _ = raw_env.reset(seed=0)
     obs_arr = obs[np.newaxis, :]   # add batch dim
