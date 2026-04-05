@@ -38,7 +38,7 @@ TRUCKS_COLS = [
 ]
 SCENARIOS_COLS = [
     "name", "i_rate", "n_years", "bat_cap_factor", "price_kwh_factor",
-    "efficiency_factor_ict", "efficiency_factor_bet", "max_lifetime_km",
+    "efficiency_factor_ict", "efficiency_factor_bet", "max_lifetime_km", "max_vehicle_age",
     "subsidy_fallback_perc", "subsidy_fallback_max",
     "diesel_price_factor", "energy_price_factor",
     "toll_ict_factor", "toll_bet_multiplier", "toll_bet_share_ict", "tax_factor",
@@ -260,10 +260,8 @@ try:
           f"got {sc_ict_at_repl.battery_replacement:.0f}")
 
     # ── Age-dependent maintenance (ICT) ──────────────────
-    sc_ict_young = compute_opex(tech=0, annual_km=annual_km, cfg=cfg, age=1.0,
-                                mileage=annual_km)
-    sc_ict_old   = compute_opex(tech=0, annual_km=annual_km, cfg=cfg, age=10.0,
-                                mileage=annual_km*10)
+    sc_ict_young = compute_opex(tech=0, annual_km=annual_km, cfg=cfg, age=1.0)
+    sc_ict_old   = compute_opex(tech=0, annual_km=annual_km, cfg=cfg, age=10.0)
     check("ICT maintenance increases with age (age=10 > age=1)",
           sc_ict_old.maintenance > sc_ict_young.maintenance,
           f"age=1: {sc_ict_young.maintenance:.0f}  age=10: {sc_ict_old.maintenance:.0f}")
@@ -288,7 +286,7 @@ try:
     # ── PriceState override ───────────────────────────────
     ps_high = PriceState(diesel_price=cfg.diesel_price * 2)
     sc_ict_high_diesel = compute_opex(tech=0, annual_km=annual_km, cfg=cfg,
-                                      age=3.0, mileage=annual_km*3, ps=ps_high)
+                                      age=3.0, ps=ps_high)
     check("PriceState diesel override doubles fuel_energy cost",
           abs(sc_ict_high_diesel.fuel_energy / sc_keep_ict.fuel_energy - 2.0) < 0.01,
           f"ratio={sc_ict_high_diesel.fuel_energy / sc_keep_ict.fuel_energy:.3f}")
@@ -332,7 +330,7 @@ try:
 
     obs, info = env.reset(seed=42)
     n = env.cfg.mdp.n_vehicles
-    expected_obs_shape = (n * 3 + 2,)
+    expected_obs_shape = (n * 2 + 2,)
     check(f"obs shape == {expected_obs_shape}", obs.shape == expected_obs_shape,
           f"got {obs.shape}")
     check("obs values in [0, 1]",
