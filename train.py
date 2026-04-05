@@ -25,7 +25,7 @@ args = parser.parse_args()
 # Configuration variables, tunable settings
 SCENARIO_NAME = _SCENARIO_MAP[args.scenario]
 ENV_ID        = "FleetReplacement-v0"
-TOTAL_STEPS   = 5_000_000             # total number of environment steps to train
+TOTAL_STEPS   = 2_500_000             # total number of environment steps to train
 N_ENVS        = 4                     # parallel environments for faster data collection
 EVAL_FREQ     = 10_000                # pause training every EVAL_FREQ steps to evaluate current policy on eval_env
 _scenario_tag = SCENARIO_NAME.replace(" ", "_").replace(":", "")
