@@ -167,14 +167,14 @@ try:
 
     # Action 0: keep ICT
     sc_keep_ict = compute_step_cost(tech=0, age=5.0, action=0,
-                                    annual_km=annual_km, mileage=annual_km*5, cfg=cfg)
+                                    annual_km=annual_km, cfg=cfg)
     check("keep ICT  → opex_total > 0",  sc_keep_ict.opex_total > 0,
           f"got {sc_keep_ict.opex_total:.0f}")
     check("keep ICT  → capex_gross == 0", sc_keep_ict.capex_gross == 0.0)
 
     # Action 1: replace with ICT
     sc_repl_ict = compute_step_cost(tech=0, age=5.0, action=1,
-                                    annual_km=annual_km, mileage=annual_km*5, cfg=cfg)
+                                    annual_km=annual_km, cfg=cfg)
     check("replace→ICT → capex_gross > 0", sc_repl_ict.capex_gross > 0,
           f"got {sc_repl_ict.capex_gross:.0f}")
     check("replace→ICT → salvage_revenue > 0 (age=5)", sc_repl_ict.salvage_revenue > 0,
@@ -184,7 +184,7 @@ try:
 
     # Action 2: replace with BET (slot already has charger → no infra cost)
     sc_repl_bet = compute_step_cost(tech=0, age=5.0, action=2,
-                                    annual_km=annual_km, mileage=annual_km*5, cfg=cfg,
+                                    annual_km=annual_km, cfg=cfg,
                                     has_charger=True, n_charger=1)
     check("replace→BET → capex_gross > ICT capex",
           sc_repl_bet.capex_gross > sc_repl_ict.capex_gross,
@@ -198,7 +198,7 @@ try:
 
     # Infrastructure cost: first BET ever (n_charger=0, no charger at slot)
     sc_first_bet = compute_step_cost(tech=0, age=5.0, action=2,
-                                     annual_km=annual_km, mileage=annual_km*5, cfg=cfg,
+                                     annual_km=annual_km, cfg=cfg,
                                      has_charger=False, n_charger=0)
     expected_first = cfg.construction_cost_contrib + cfg.charger_price
     check(f"first BET (n_charger=0) → infra_cost == construction + charger ({expected_first:,.0f})",
@@ -207,7 +207,7 @@ try:
 
     # Infrastructure cost: subsequent BET (n_charger=5, no charger at slot)
     sc_next_bet = compute_step_cost(tech=0, age=5.0, action=2,
-                                    annual_km=annual_km, mileage=annual_km*5, cfg=cfg,
+                                    annual_km=annual_km, cfg=cfg,
                                     has_charger=False, n_charger=5)
     check(f"subsequent BET (n_charger=5) → infra_cost == charger_price ({cfg.charger_price:,.0f})",
           sc_next_bet.infra_cost == cfg.charger_price,
@@ -215,7 +215,7 @@ try:
 
     # Infrastructure cost: depot full (n_charger=10)
     sc_full_depot = compute_step_cost(tech=0, age=5.0, action=2,
-                                      annual_km=annual_km, mileage=annual_km*5, cfg=cfg,
+                                      annual_km=annual_km, cfg=cfg,
                                       has_charger=False, n_charger=10)
     check("BET with n_charger=10 → infra_cost == 0",
           sc_full_depot.infra_cost == 0.0,
@@ -223,7 +223,7 @@ try:
 
     # Keep BET (age 3)
     sc_keep_bet = compute_step_cost(tech=1, age=3.0, action=0,
-                                    annual_km=annual_km, mileage=annual_km*3, cfg=cfg)
+                                    annual_km=annual_km, cfg=cfg)
     check("keep BET  → opex_total > 0", sc_keep_bet.opex_total > 0,
           f"got {sc_keep_bet.opex_total:.0f}")
     check("keep BET (age 3) → no battery_replacement",
@@ -236,7 +236,7 @@ try:
                          * cfg.price_kwh_base * cfg.price_kwh_factor)
 
     sc_bat_hit = compute_step_cost(tech=1, age=float(repl_age), action=0,
-                                   annual_km=annual_km, mileage=annual_km*repl_age, cfg=cfg)
+                                   annual_km=annual_km, cfg=cfg)
     check(f"BET at age={repl_age} → battery_replacement > 0",
           sc_bat_hit.battery_replacement > 0,
           f"got {sc_bat_hit.battery_replacement:.0f}")
@@ -247,14 +247,13 @@ try:
     for off_age in [repl_age - 1, repl_age + 1]:
         if off_age > 0:
             sc_no_bat = compute_step_cost(tech=1, age=float(off_age), action=0,
-                                          annual_km=annual_km, mileage=annual_km*off_age,
-                                          cfg=cfg)
+                                          annual_km=annual_km, cfg=cfg)
             check(f"BET at age={off_age} (≠ repl_age) → battery_replacement == 0",
                   sc_no_bat.battery_replacement == 0.0,
                   f"got {sc_no_bat.battery_replacement:.0f}")
 
     sc_ict_at_repl = compute_step_cost(tech=0, age=float(repl_age), action=0,
-                                       annual_km=annual_km, mileage=annual_km*repl_age, cfg=cfg)
+                                       annual_km=annual_km, cfg=cfg)
     check("ICT at battery_replacement_age → battery_replacement == 0",
           sc_ict_at_repl.battery_replacement == 0.0,
           f"got {sc_ict_at_repl.battery_replacement:.0f}")
@@ -409,8 +408,7 @@ try:
     from fleetreplacement_env.envs.costs import compute_step_cost as _csc
     cost_item = _csc(
         tech=1, age=float(bra), action=0,
-        annual_km=annual_km_env, mileage=annual_km_env * bra,
-        cfg=env_b.cfg.cost,
+        annual_km=annual_km_env, cfg=env_b.cfg.cost,
     )
     check(f"env: BET at battery_replacement_age={bra} → step cost includes battery_replacement",
           cost_item.battery_replacement > 0,

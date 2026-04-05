@@ -338,7 +338,6 @@ def compute_step_cost(
     action: int,
     annual_km: float,
     cfg: CostConfig,
-    mileage: float,
     has_charger: bool = True,
     n_charger: int = 0,
     ps: Optional[PriceState] = None,
@@ -352,7 +351,6 @@ def compute_step_cost(
     action      : 0=keep, 1=replace with ICT, 2=replace with BET
     annual_km   : km driven this step, uses cfg.akt_base as default
     cfg         : CostConfig
-    mileage     : current vehicle odometer reading in km
     has_charger : True if this vehicle slot already has a charger installed
     n_charger   : number of charger slots installed in the fleet before this purchase
     ps          : optional stochastic price overrides

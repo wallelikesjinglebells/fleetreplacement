@@ -129,7 +129,6 @@ class FleetReplacementEnv(gym.Env):
                 age=age,
                 action=act,
                 annual_km=self.cfg.cost.akt_base,
-                mileage=mileage,
                 cfg=self.cfg.cost,
                 has_charger=bool(self.charger_slots[i]),
                 n_charger=int(self.charger_slots.sum()),
