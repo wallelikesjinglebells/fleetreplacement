@@ -3,11 +3,7 @@ __pycache__/
 *.py[cod]
 
 # Training logs (TensorBoard event files, Monitor wrapper)
-logs/PPO_*/
-logs/evaluations.npz
-logs/eval_monitor.monitor.csv
-logs/deepsets/
-logs/before_reward_norm/
+logs/
 
 # Trained model weights
 models/
