@@ -36,10 +36,10 @@ class FleetReplacementEnv(gym.Env):
         n_vehicles = self.cfg.mdp.n_vehicles
         
         # State space as box, matrix of shape (n_vehicles, 2 (technology, mileage))
-        # After including current_step and n_charger: vector with n_vehicles*2+2 elements
+        # After including current_step, n_charger, steps_to_ban: vector with n_vehicles*2+3 elements
         self.observation_space = spaces.Box(
-            low  = np.zeros(n_vehicles * 2 + 2, dtype=np.float32),
-            high = np.ones( n_vehicles * 2 + 2, dtype=np.float32),
+            low  = np.zeros(n_vehicles * 2 + 3, dtype=np.float32),
+            high = np.ones( n_vehicles * 2 + 3, dtype=np.float32),
             dtype = np.float32
         )
 
@@ -56,9 +56,13 @@ class FleetReplacementEnv(gym.Env):
         # age = self.fleet_state[:, 1] / self.cfg.mdp.max_possible_vehicle_age                               # removed from obs: max_vehicle_age never triggers (km limit binds first)
         mileage = self.fleet_state[:, 2] / self.cfg.cost.max_lifetime_km                                     # normalize by scenario-specific lifetime km cap
         flat_fleet = np.stack([tech, mileage], axis=1).flatten().astype(np.float32)
-        step_feature = np.array([self.current_step / self.cfg.mdp.planning_horizon], dtype=np.float32)       # normalize
-        charger_feature = np.array([self.charger_slots.sum() / self.cfg.mdp.n_vehicles], dtype=np.float32)   # normalize
-        return np.concatenate([flat_fleet, step_feature, charger_feature])
+        step_feature = np.array([self.current_step / self.cfg.mdp.planning_horizon], dtype=np.float32)                                          # normalize
+        # Share of installed chargers
+        charger_feature = np.array([self.charger_slots.sum() / self.cfg.mdp.n_vehicles], dtype=np.float32)                                      # normalize
+        # Diesel ban
+        steps_to_ban = max(0, self.ict_ban_step - self.current_step)
+        ban_feature = np.array([min(1.0, steps_to_ban / self.cfg.mdp.planning_horizon)], dtype=np.float32)                                      # normalize; 1.0 if ban is beyond horizon (S1/S2), decreases to 0 as ban approaches
+        return np.concatenate([flat_fleet, step_feature, charger_feature, ban_feature])
     
     def _get_info(self):
         return {
