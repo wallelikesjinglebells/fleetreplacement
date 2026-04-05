@@ -25,13 +25,13 @@ def make_masked_env():
 
 # Create vectorized environment for all N_ENVS environments
 vec_env = make_vec_env(make_masked_env, n_envs=N_ENVS)
-vec_env = VecNormalize(vec_env, norm_obs=False, norm_reward=True, gamma=0.99)       # normalize reward
+vec_env = VecNormalize(vec_env, norm_obs=False, norm_reward=True, gamma=1.0)       # gamma=1.0: env already applies economic discounting in reward
 
 # Single evaluation environment
 _monitor_env = Monitor(make_masked_env(), filename="./logs/eval_monitor")        # Monitor wrapper to fix warning if other wrappers are present
 eval_env = DummyVecEnv([lambda: _monitor_env])
 eval_env = VecNormalize(eval_env, norm_obs=False, norm_reward=True,
-                        training=False, gamma=0.99)
+                        training=False, gamma=1.0)
 # Sync stats from training env
 sync_envs_normalization(vec_env, eval_env)
 
@@ -54,7 +54,7 @@ model = MaskablePPO(
     n_steps=2048,           # no. of steps each env collects before policy update, results in total n_steps x n_envs number of transitions       
     batch_size=64,
     n_epochs=10,
-    gamma=0.99,
+    gamma=1.0,              # env already applies economic discounting in reward, no additional discounting needed
     tensorboard_log=LOG_DIR,
     ent_coef=0.01,          # entropy coefficient for loss calculation (PPO is rewarded for exploring all actions)
 )
