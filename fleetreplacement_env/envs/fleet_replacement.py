@@ -203,14 +203,14 @@ class FleetReplacementEnv(gym.Env):
             self._render_frame()
 
     def _render_frame(self, action=None, cost=None):
-        act_labels = {0: "kept", 1: "→ ICT", 2: "→ BET"}
-        print(f"\n── Step {self.current_step} ──────────────────────────────")
+        act_labels = {0: "kept", 1: "-> ICT", 2: "-> BET"}
+        print(f"\n-- Step {self.current_step} ------------------------------")
         print(f"{'#':<5} {'Tech':<8} {'Age':>5} {'Mileage':>10}  Action")
         for i, (tech, age, km) in enumerate(self.fleet_state):
             act = act_labels.get(int(action[i]), "-") if action is not None else "-"
             print(f"{i:<5} {'ICT' if tech == 0 else 'BET':<8} {int(age):>5} {int(km):>10}  {act}")
         if cost is not None:
-            print(f"\nTotal cost: €{cost:>12,.0f}   Reward: €{-cost:>12,.0f}")
+            print(f"\nTotal cost: EUR {cost:>12,.0f}   Reward: EUR {-cost:>12,.0f}")
 
     
     def close(self):
