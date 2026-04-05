@@ -35,3 +35,15 @@ TensorFlow
 ```bash
 pip install tensorflow
 ```
+### Using
+```bash
+python train.py <scenario>
+```
+
+| Scenario                               | Command-line |
+| -------------------------------------- | ------------ |
+| Status Quo                             | SQ           |
+| Scenario 1: Technological Stalemate    | S1           |
+| Scenario 2: Technology without Mandate | S2           |
+| Scenario 3: Ambition meets Reality     | S3           |
+| Scenario 4: Autonomous Green Logistics | S4           |
