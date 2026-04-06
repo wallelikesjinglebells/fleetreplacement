@@ -1,3 +1,9 @@
+"""
+Cost calculations for the fleet replacement environment.
+
+Computes the per-step total cost for each vehicle, including purchase, fuel/energy, maintenance, and carbon costs, based on the current state and the chosen action.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

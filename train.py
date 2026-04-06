@@ -1,3 +1,13 @@
+"""
+MaskablePPO training for fleet replacement.
+
+Trains a MaskablePPO agent on the FleetReplacement-v0 environment for a given scenario, periodically evaluates the current policy, and saves the best and final models.
+
+Usage:
+    python train.py SQ          # Status Quo (default)
+    python train.py S1          # Scenario 1, etc.
+"""
+
 import argparse
 import fleetreplacement_env  # triggers register() in __init__.py, is important for gym.make() although flagged as not accessed
 import gymnasium as gym
@@ -25,7 +35,7 @@ args = parser.parse_args()
 # Configuration variables, tunable settings
 SCENARIO_NAME = _SCENARIO_MAP[args.scenario]
 ENV_ID        = "FleetReplacement-v0"
-TOTAL_STEPS   = 2_500_000             # total number of environment steps to train
+TOTAL_STEPS   = 7_000_000             # total number of environment steps to train
 N_ENVS        = 4                     # parallel environments for faster data collection
 EVAL_FREQ     = 10_000                # pause training every EVAL_FREQ steps to evaluate current policy on eval_env
 _scenario_tag = SCENARIO_NAME.replace(" ", "_").replace(":", "")

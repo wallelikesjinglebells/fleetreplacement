@@ -1,3 +1,12 @@
+"""
+Single-episode visual evaluation of a saved MaskablePPO model.
+
+Loads the best saved model for the Status Quo scenario and runs one episode with human rendering so the fleet decisions can be watched step by step.
+
+Usage:
+    python evaluate.py
+"""
+
 import fleetreplacement_env
 import gymnasium as gym
 from sb3_contrib import MaskablePPO

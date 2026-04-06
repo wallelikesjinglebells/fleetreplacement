@@ -1,3 +1,9 @@
+"""
+Configuration dataclasses and CSV loaders for the fleet replacement environment.
+
+Defines MDPConfig (MDP hyperparameters), CostConfig (scenario cost tables), and FleetEnvConfig (combined config), plus helpers to load cost data from CSV.
+"""
+
 import pandas as pd
 from dataclasses import dataclass
 from pathlib import Path

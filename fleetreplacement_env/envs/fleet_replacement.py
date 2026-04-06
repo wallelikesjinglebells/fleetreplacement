@@ -1,3 +1,9 @@
+"""
+Gymnasium environment for the fleet replacement MDP.
+
+Defines the FleetReplacementEnv: state space (vehicle ages and mileages), action space (keep / replace each vehicle), transition dynamics, reward (negative total cost), and rendering.
+"""
+
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
