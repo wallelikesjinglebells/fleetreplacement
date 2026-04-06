@@ -19,7 +19,7 @@ class PriceState:
     """
     diesel_price: Optional[float] = None        # €/L
     energy_price: Optional[float] = None        # €/kWh
-    capex_ict: Optional[float] = None           # € (gross truck price before factor)
+    capex_dt: Optional[float] = None           # € (gross truck price before factor)
     capex_bet_excl_bat: Optional[float] = None  # € (truck excl. battery, before factor)
     price_kwh: Optional[float] = None           # €/kWh (battery cell price, before factor)
 
@@ -103,14 +103,14 @@ def _energy_price(cfg: CostConfig, ps: Optional[PriceState]) -> float:
     return base * cfg.energy_price_factor
 
 
-def _capex_ict_gross(cfg: CostConfig, ps: Optional[PriceState]) -> float:
+def _capex_dt_gross(cfg: CostConfig, ps: Optional[PriceState]) -> float:
     """
-    CAPEX for ICT
+    CAPEX for DT
     Adapted from Clara: class ICT → self.capex_truck = (retail_price * f_capex_powertrain) + (capex_auto_base * f_capex_auto) (no auto in my case)
     """
-    base = (ps.capex_ict if ps and ps.capex_ict is not None
-            else cfg.capex_ict)                                 # cfg.capex_ict = retail_price
-    return base * cfg.capex_ict_factor                          # cfg.capex_ict_factor = f_capex_powertrain
+    base = (ps.capex_dt if ps and ps.capex_dt is not None
+            else cfg.capex_dt)                                 # cfg.capex_dt = retail_price
+    return base * cfg.capex_dt_factor                          # cfg.capex_dt_factor = f_capex_powertrain
 
 
 def _capex_bet_truck_gross(cfg: CostConfig, ps: Optional[PriceState]) -> float:
@@ -146,10 +146,10 @@ def _battery_cost(cfg: CostConfig, ps: Optional[PriceState]) -> float:
 #     n = max(cfg.n_years, 1.0)
 #     age_eff = age + 1     # new vehicle immediately has value of 1-year-old vehicle
 
-#     # ICT
+#     # DT
 #     if tech == 0:
-#         capex = _capex_ict_gross(cfg, ps)
-#         val = capex * (cfg.residual_ict_perc ** (age_eff / n))
+#         capex = _capex_dt_gross(cfg, ps)
+#         val = capex * (cfg.residual_dt_perc ** (age_eff / n))
 #         return max(0.0, val)                                    # prevent negative values if a vehicle is held past its assumed lifetime
 
 #     else:  # BET: separate depreciation for truck body and battery
@@ -171,10 +171,10 @@ def _market_value(
     """
     n = max(cfg.n_years, 1.0)
 
-    # ICT
+    # DT
     if tech == 0:
-        capex = _capex_ict_gross(cfg, ps)
-        val = capex * (cfg.residual_ict_perc ** (age / n))
+        capex = _capex_dt_gross(cfg, ps)
+        val = capex * (cfg.residual_dt_perc ** (age / n))
         return max(0.0, val)                                    # prevent negative values if a vehicle is held past its assumed lifetime
 
     else:  # BET: separate depreciation for truck body and battery
@@ -194,8 +194,8 @@ def _bet_subsidy(
     German BET purchase subsidy
     Adapted from Clara: class BET → calculate_subsidy
     """
-    capex_ict_ref = _capex_ict_gross(cfg, ps)
-    premium = max(0.0, capex_bet_total - capex_ict_ref)             # premium for BET (Clara: "diff"), prevent negative value if BET price is lower than ICT
+    capex_dt_ref = _capex_dt_gross(cfg, ps)
+    premium = max(0.0, capex_bet_total - capex_dt_ref)             # premium for BET (Clara: "diff"), prevent negative value if BET price is lower than DT
 
     if cfg.subsidy_perc > 0 or cfg.subsidy_max > 0:
         return min(premium * cfg.subsidy_perc, cfg.subsidy_max)
@@ -218,7 +218,7 @@ def compute_replacement_cost(
     Lump-sum cost for replacing a vehicle in the current timestep
 
     Parameters
-    new_tech    : 0 = ICT, 1 = BET
+    new_tech    : 0 = DT, 1 = BET
     old_tech    : technology of the vehicle being retired
     old_age     : age of the vehicle being retired, in years
     cfg         : CostConfig (Germany, manual drivetrain)
@@ -231,8 +231,8 @@ def compute_replacement_cost(
     """
     cost = StepCost()
 
-    if new_tech == 0:  # new ICT
-        cost.capex_gross = _capex_ict_gross(cfg, ps)
+    if new_tech == 0:  # new DT
+        cost.capex_gross = _capex_dt_gross(cfg, ps)
         cost.subsidy = 0.0  # no purchase subsidy for diesel in Germany
 
     else:  # new BET
@@ -272,7 +272,7 @@ def compute_opex(
     Annual operating cost for a vehicle that is kept (not replaced) this year.
 
     Parameters
-    tech       : 0 = ICT, 1 = BET
+    tech       : 0 = DT, 1 = BET
     annual_km  : km driven this year, pass cfg.akt_base as default from the env
     cfg        : CostConfig
     ps         : optional stochastic price overrides
@@ -283,20 +283,20 @@ def compute_opex(
     cost = StepCost()
     hours = annual_km / cfg.avg_speed  # driving hours per year
 
-    if tech == 0:  # ICT
+    if tech == 0:  # DT
         cost.fuel_energy = (                   # adapted from Clara: class ICT → self.cost_breakdown["Diesel"]
             annual_km
-            * (cfg.consumption_ict / 100.0)    # L/km
-            * cfg.efficiency_factor_ict        # scenario efficiency scaling
+            * (cfg.consumption_dt / 100.0)    # L/km
+            * cfg.efficiency_factor_dt        # scenario efficiency scaling
             * _diesel_price(cfg, ps)
         )
 
-        # ICT toll
-        cost.toll = annual_km * cfg.toll_ict * cfg.toll_ict_factor          # adapted from Clara: class ICT → self.cost_breakdown["Toll"]
+        # DT toll
+        cost.toll = annual_km * cfg.toll_dt * cfg.toll_dt_factor          # adapted from Clara: class ICT → self.cost_breakdown["Toll"]
         
         # Age-dependent maintenance
-        age_scale = 1.0 + cfg.maint_age_factor_ict * age                    # age-dependent maintenance cost
-        cost.maintenance = annual_km * cfg.maint_km_ict * cfg.maint_factor * age_scale      # adapted from Clara: class ICT → self.cost_breakdown["Maintenance"]
+        age_scale = 1.0 + cfg.maint_age_factor_dt * age                    # age-dependent maintenance cost
+        cost.maintenance = annual_km * cfg.maint_km_dt * cfg.maint_factor * age_scale      # adapted from Clara: class ICT → self.cost_breakdown["Maintenance"]
 
         # Other costs
         cost.driver = hours * cfg.driver_wage * cfg.driver_wage_factor      # adapted from Clara: class ICT → self.cost_breakdown["Driver"]
@@ -312,9 +312,9 @@ def compute_opex(
         )
         
         # BET toll: adapted from Clara 
-        ict_toll_adj = cfg.toll_ict * cfg.toll_ict_factor               # adapted from Clara: class BET → future_ict_toll = self.country.toll_ict * f_toll_ict
+        dt_toll_adj = cfg.toll_dt * cfg.toll_dt_factor               # adapted from Clara: class BET → future_dt_toll = self.country.toll_dt * f_toll_dt
         base_bet_toll = cfg.toll_bet * cfg.toll_bet_multiplier          # adapted from Clara: class BET → base_bet_toll = self.country.toll_bet * f_toll_mult
-        floor_bet_toll = ict_toll_adj * cfg.toll_bet_share_ict          # adapted from Clara: class BET → min_bet_toll (= floor_bet_toll)
+        floor_bet_toll = dt_toll_adj * cfg.toll_bet_share_dt          # adapted from Clara: class BET → min_bet_toll (= floor_bet_toll)
         cost.toll = annual_km * max(base_bet_toll, floor_bet_toll)      # adapted from Clara: class BET → self.cost_breakdown["Toll"], actual_toll_bet = max(base_bet_toll, min_bet_toll)
         
         # Age-dependent maintenance
@@ -347,9 +347,9 @@ def compute_step_cost(
     Unified entry point for fleet_replacement.py step()
 
     Parameters
-    tech        : current vehicle technology (0=ICT, 1=BET)
+    tech        : current vehicle technology (0=DT, 1=BET)
     age         : current vehicle age in years
-    action      : 0=keep, 1=replace with ICT, 2=replace with BET
+    action      : 0=keep, 1=replace with DT, 2=replace with BET
     annual_km   : km driven this step, uses cfg.akt_base as default
     cfg         : CostConfig
     has_charger : True if this vehicle slot already has a charger installed

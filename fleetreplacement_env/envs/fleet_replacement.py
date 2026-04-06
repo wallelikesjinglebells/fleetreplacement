@@ -50,11 +50,11 @@ class FleetReplacementEnv(gym.Env):
         )
 
         # Action space
-        self.action_space = spaces.MultiDiscrete([3] * n_vehicles)        # 0=keep, 1=replace with ICT, 2=replace with BET
+        self.action_space = spaces.MultiDiscrete([3] * n_vehicles)        # 0=keep, 1=replace with DT, 2=replace with BET
 
-        # Derive ICT purchase ban step from calendar year, limit to [0, planning_horizon]
-        raw_ban_step = self.cfg.cost.ict_ban_year - self.cfg.mdp.start_year 
-        self.ict_ban_step = max(0, min(raw_ban_step, self.cfg.mdp.planning_horizon))
+        # Derive DT purchase ban step from calendar year, limit to [0, planning_horizon]
+        raw_ban_step = self.cfg.cost.dt_ban_year - self.cfg.mdp.start_year 
+        self.dt_ban_step = max(0, min(raw_ban_step, self.cfg.mdp.planning_horizon))
 
     # Constructing observations for NN
     def _get_obs(self):
@@ -64,8 +64,8 @@ class FleetReplacementEnv(gym.Env):
         flat_fleet = np.stack([tech, mileage], axis=1).flatten().astype(np.float32)
         # Share of installed chargers
         charger_feature = np.array([self.charger_slots.sum() / self.cfg.mdp.n_vehicles], dtype=np.float32)                                      # normalize
-        # Steps to ICT ban
-        steps_to_ban = max(0, self.ict_ban_step - self.current_step)
+        # Steps to DT ban
+        steps_to_ban = max(0, self.dt_ban_step - self.current_step)
         ban_feature = np.array([min(1.0, steps_to_ban / self.cfg.mdp.planning_horizon)], dtype=np.float32)                                      # normalize; 1.0 if ban is beyond horizon (S1/S2), decreases to 0 as ban approaches
         return np.concatenate([flat_fleet, charger_feature, ban_feature])
     
@@ -75,7 +75,7 @@ class FleetReplacementEnv(gym.Env):
             "mean_age": float(self.fleet_state[:, 1].mean()),
             "mean_mileage": float(self.fleet_state[:, 2].mean()),
             "n_bet": int((self.fleet_state[:, 0] == 1).sum()),
-            "n_ict":  int((self.fleet_state[:, 0] == 0).sum()),
+            "n_dt":  int((self.fleet_state[:, 0] == 0).sum()),
             "n_charger": int(self.charger_slots.sum()),
         }
     
@@ -93,7 +93,7 @@ class FleetReplacementEnv(gym.Env):
         ages = self.np_random.integers(1, max_init_age + 1, size=self.cfg.mdp.n_vehicles).astype(np.float32)      # generate random vehicle age; +1 allows max_init_age to be included in range (np is exclusive on upper bound); convert to float (as defined in obs space)
         # Initialize mileage
         mileages = ages * self.cfg.cost.akt_base                                                                  # starting mileage, derived from age
-        technologies = np.zeros(self.cfg.mdp.n_vehicles, dtype=np.float32)                                        # 0 = diesel, all ICT
+        technologies = np.zeros(self.cfg.mdp.n_vehicles, dtype=np.float32)                                        # 0 = diesel, all DT
 
         self.fleet_state = np.stack([technologies, ages, mileages], axis=1)            # combine above arrays to matrix of shape (n_vehicles, 3) to make columns parameters, rows vehicles
 
@@ -113,7 +113,7 @@ class FleetReplacementEnv(gym.Env):
         for i in range(self.cfg.mdp.n_vehicles):
             tech, age, mileage = self.fleet_state[i]    # unpack row i (vehicle i) into three variables
             # replace = bool(action[i])                   # convert binary action into true/false
-            act = int(action[i])                        # assign value of replacement to act (0 = keep, 1 = replace with ICT, 2 = replace with BET)
+            act = int(action[i])                        # assign value of replacement to act (0 = keep, 1 = replace with DT, 2 = replace with BET)
 
             # # Forced replacement if limits exceeded (regardless of action)
             # # Returns true or false if one is true
@@ -123,7 +123,7 @@ class FleetReplacementEnv(gym.Env):
             #     or mileage + self.cfg.cost.akt_base >= self.cfg.cost.max_lifetime_km
             # )
 
-            # # If agent says no replacement, but force_replace is true, default to replace with ICT
+            # # If agent says no replacement, but force_replace is true, default to replace with DT
             # if force_replace and act == 0:
             #     act = 1
 
@@ -144,7 +144,7 @@ class FleetReplacementEnv(gym.Env):
             # Update fleet state after cost is computed
             if act == 0:    # keep
                 self.fleet_state[i] = [tech, age + 1, mileage + self.cfg.cost.akt_base]
-            elif act == 1:  # replace with ICT
+            elif act == 1:  # replace with DT
                 self.fleet_state[i] = [0.0, 1.0, self.cfg.cost.akt_base]
             else:           # replace with BET (act=2)
                 self.fleet_state[i] = [1.0, 1.0, self.cfg.cost.akt_base]
@@ -167,21 +167,21 @@ class FleetReplacementEnv(gym.Env):
     def action_masks(self) -> np.ndarray:
         """
         Returns a flat bool array of shape (n_vehicles * 3,) for MaskablePPO
-        [keep, replace with ICT, replace with BET]
+        [keep, replace with DT, replace with BET]
         True = action is valid, False = action is masked out
         """
         assert self.fleet_state is not None, "Call reset() before action_masks()."
         n = self.cfg.mdp.n_vehicles
         masks = np.ones((n, 3), dtype=bool)     # n=vehicles, 3 possible actions
 
-        ict_banned = self.current_step >= self.ict_ban_step
+        dt_banned = self.current_step >= self.dt_ban_step
 
         for i in range(n):
             tech, age, mileage = self.fleet_state[i]
 
             # Rule 1: Block replacing a brand-new vehicle (age == 1)
             if age <= 1.0:
-                masks[i, 1] = False  # block replace with ICT
+                masks[i, 1] = False  # block replace with DT
                 masks[i, 2] = False  # block replace with BET
 
             # Rule 2: Force replace if at lifetime limit
@@ -190,11 +190,11 @@ class FleetReplacementEnv(gym.Env):
                 or mileage + self.cfg.cost.akt_base >= self.cfg.cost.max_lifetime_km    # primary limit, see config.py
             )
             if must_replace:
-                masks[i, 0] = False  # cannot keep, but agent can decide if replace with BET or ICT
+                masks[i, 0] = False  # cannot keep, but agent can decide if replace with BET or DT
 
-            # Rule 3: Block ICT purchase after ban year
-            if ict_banned:
-                masks[i, 1] = False  # block replace with ICT
+            # Rule 3: Block DT purchase after ban year
+            if dt_banned:
+                masks[i, 1] = False  # block replace with DT
 
             # Safety: ensure at least one action is always valid
             # Edge case: age==1 AND must_replace, theoretically impossible given max_vehicle_age >> 1
@@ -209,12 +209,12 @@ class FleetReplacementEnv(gym.Env):
             self._render_frame()
 
     def _render_frame(self, action=None, cost=None):
-        act_labels = {0: "kept", 1: "-> ICT", 2: "-> BET"}
+        act_labels = {0: "kept", 1: "-> DT", 2: "-> BET"}
         print(f"\n-- Step {self.current_step} ------------------------------")
         print(f"{'#':<5} {'Tech':<8} {'Age':>5} {'Mileage':>10}  Action")
         for i, (tech, age, km) in enumerate(self.fleet_state):
             act = act_labels.get(int(action[i]), "-") if action is not None else "-"
-            print(f"{i:<5} {'ICT' if tech == 0 else 'BET':<8} {int(age):>5} {int(km):>10}  {act}")
+            print(f"{i:<5} {'DT' if tech == 0 else 'BET':<8} {int(age):>5} {int(km):>10}  {act}")
         if cost is not None:
             print(f"\nTotal cost: EUR {cost:>12,.0f}   Reward: EUR {-cost:>12,.0f}")
 

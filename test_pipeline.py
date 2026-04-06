@@ -29,8 +29,8 @@ section("LAYER 1 — CSV file integrity")
 
 COUNTRIES_COLS = [
     "name", "diesel_price", "energy_price", "construction_cost_contrib", "charger_price",
-    "toll_ict", "toll_bet", "driver_wage", "tax",
-    "maint_km_ICT", "maint_km_BET", "insurance_base", "subsidy_type", "subsidy_data",
+    "toll_dt", "toll_bet", "driver_wage", "tax",
+    "maint_km_DT", "maint_km_BET", "insurance_base", "subsidy_type", "subsidy_data",
 ]
 TRUCKS_COLS = [
     "name", "capex_base", "consumption", "bat_cap", "price_kwh_base",
@@ -38,14 +38,14 @@ TRUCKS_COLS = [
 ]
 SCENARIOS_COLS = [
     "name", "i_rate", "n_years", "bat_cap_factor", "price_kwh_factor",
-    "efficiency_factor_ict", "efficiency_factor_bet", "max_lifetime_km", "max_vehicle_age",
+    "efficiency_factor_dt", "efficiency_factor_bet", "max_lifetime_km", "max_vehicle_age",
     "subsidy_fallback_perc", "subsidy_fallback_max",
     "diesel_price_factor", "energy_price_factor",
-    "toll_ict_factor", "toll_bet_multiplier", "toll_bet_share_ict", "tax_factor",
+    "toll_dt_factor", "toll_bet_multiplier", "toll_bet_share_dt", "tax_factor",
     "maint_manual_factor", "driver_wage_factor", "tire_factor", "insurance_factor",
-    "capex_ict_factor", "capex_bet_factor",
-    "residual_ict_truck_perc", "residual_bet_truck_perc", "residual_bat_perc",
-    "ict_ban_year", "battery_replacement_age",
+    "capex_dt_factor", "capex_bet_factor",
+    "residual_dt_truck_perc", "residual_bet_truck_perc", "residual_bat_perc",
+    "dt_ban_year", "battery_replacement_age",
 ]
 
 try:
@@ -77,8 +77,8 @@ try:
     for col in TRUCKS_COLS:
         check(f"  column '{col}' present", col in df_t.columns,
               f"missing from {list(df_t.columns)}")
-    check("01_ICT_Manual_Multi row exists",
-          (df_t["name"] == "01_ICT_Manual_Multi").sum() == 1)
+    check("01_DT_Manual_Multi row exists",
+          (df_t["name"] == "01_DT_Manual_Multi").sum() == 1)
     check("05_BET_Manual_Multi row exists",
           (df_t["name"] == "05_BET_Manual_Multi").sum() == 1)
 except Exception as e:
@@ -117,8 +117,8 @@ try:
     # Spot-check a few fields that should be clearly > 0
     must_be_positive = [
         "diesel_price", "energy_price", "construction_cost_contrib", "charger_price",
-        "capex_ict", "capex_bet_excl_bat",
-        "bat_cap", "price_kwh_base", "consumption_ict", "consumption_bet",
+        "capex_dt", "capex_bet_excl_bat",
+        "bat_cap", "price_kwh_base", "consumption_dt", "consumption_bet",
         "akt_base", "avg_speed", "n_years",
     ]
     for field in must_be_positive:
@@ -127,7 +127,7 @@ try:
 
     # Factors of 1.0 or nearby are reasonable; just check they are not NaN/zero
     factor_fields = [
-        "diesel_price_factor", "energy_price_factor", "capex_ict_factor",
+        "diesel_price_factor", "energy_price_factor", "capex_dt_factor",
         "capex_bet_factor", "maint_factor", "driver_wage_factor",
         "tire_factor", "insurance_factor",
     ]
@@ -174,30 +174,30 @@ try:
     cfg = load_cost_config()
     annual_km = cfg.akt_base
 
-    # Action 0: keep ICT
-    sc_keep_ict = compute_step_cost(tech=0, age=5.0, action=0,
+    # Action 0: keep DT
+    sc_keep_dt = compute_step_cost(tech=0, age=5.0, action=0,
                                     annual_km=annual_km, cfg=cfg)
-    check("keep ICT  → opex_total > 0",  sc_keep_ict.opex_total > 0,
-          f"got {sc_keep_ict.opex_total:.0f}")
-    check("keep ICT  → capex_gross == 0", sc_keep_ict.capex_gross == 0.0)
+    check("keep DT  → opex_total > 0",  sc_keep_dt.opex_total > 0,
+          f"got {sc_keep_dt.opex_total:.0f}")
+    check("keep DT  → capex_gross == 0", sc_keep_dt.capex_gross == 0.0)
 
-    # Action 1: replace with ICT
-    sc_repl_ict = compute_step_cost(tech=0, age=5.0, action=1,
+    # Action 1: replace with DT
+    sc_repl_dt = compute_step_cost(tech=0, age=5.0, action=1,
                                     annual_km=annual_km, cfg=cfg)
-    check("replace→ICT → capex_gross > 0", sc_repl_ict.capex_gross > 0,
-          f"got {sc_repl_ict.capex_gross:.0f}")
-    check("replace→ICT → salvage_revenue > 0 (age=5)", sc_repl_ict.salvage_revenue > 0,
-          f"got {sc_repl_ict.salvage_revenue:.0f}")
-    check("replace→ICT → subsidy == 0", sc_repl_ict.subsidy == 0.0,
-          f"got {sc_repl_ict.subsidy:.0f}")
+    check("replace→DT → capex_gross > 0", sc_repl_dt.capex_gross > 0,
+          f"got {sc_repl_dt.capex_gross:.0f}")
+    check("replace→DT → salvage_revenue > 0 (age=5)", sc_repl_dt.salvage_revenue > 0,
+          f"got {sc_repl_dt.salvage_revenue:.0f}")
+    check("replace→DT → subsidy == 0", sc_repl_dt.subsidy == 0.0,
+          f"got {sc_repl_dt.subsidy:.0f}")
 
     # Action 2: replace with BET (slot already has charger → no infra cost)
     sc_repl_bet = compute_step_cost(tech=0, age=5.0, action=2,
                                     annual_km=annual_km, cfg=cfg,
                                     has_charger=True, n_charger=1)
-    check("replace→BET → capex_gross > ICT capex",
-          sc_repl_bet.capex_gross > sc_repl_ict.capex_gross,
-          f"BET={sc_repl_bet.capex_gross:.0f}  ICT={sc_repl_ict.capex_gross:.0f}")
+    check("replace→BET → capex_gross > DT capex",
+          sc_repl_bet.capex_gross > sc_repl_dt.capex_gross,
+          f"BET={sc_repl_bet.capex_gross:.0f}  DT={sc_repl_dt.capex_gross:.0f}")
     check("replace→BET (has_charger=True) → infra_cost == 0",
           sc_repl_bet.infra_cost == 0.0,
           f"got {sc_repl_bet.infra_cost:.0f}")
@@ -261,11 +261,11 @@ try:
                   sc_no_bat.battery_replacement == 0.0,
                   f"got {sc_no_bat.battery_replacement:.0f}")
 
-    sc_ict_at_repl = compute_step_cost(tech=0, age=float(repl_age), action=0,
+    sc_dt_at_repl = compute_step_cost(tech=0, age=float(repl_age), action=0,
                                        annual_km=annual_km, cfg=cfg)
-    check("ICT at battery_replacement_age → battery_replacement == 0",
-          sc_ict_at_repl.battery_replacement == 0.0,
-          f"got {sc_ict_at_repl.battery_replacement:.0f}")
+    check("DT at battery_replacement_age → battery_replacement == 0",
+          sc_dt_at_repl.battery_replacement == 0.0,
+          f"got {sc_dt_at_repl.battery_replacement:.0f}")
 
     # Newly replaced BET (age=0 in replacement year) must not trigger battery replacement
     sc_new_bet = compute_step_cost(tech=1, age=0.0, action=0,
@@ -274,19 +274,19 @@ try:
           sc_new_bet.battery_replacement == 0.0,
           f"got {sc_new_bet.battery_replacement:.0f}")
 
-    # ── Age-dependent maintenance (ICT) ──────────────────
-    sc_ict_young = compute_opex(tech=0, annual_km=annual_km, cfg=cfg, age=1.0)
-    sc_ict_old   = compute_opex(tech=0, annual_km=annual_km, cfg=cfg, age=10.0)
-    check("ICT maintenance increases with age (age=10 > age=1)",
-          sc_ict_old.maintenance > sc_ict_young.maintenance,
-          f"age=1: {sc_ict_young.maintenance:.0f}  age=10: {sc_ict_old.maintenance:.0f}")
+    # ── Age-dependent maintenance (DT) ──────────────────
+    sc_dt_young = compute_opex(tech=0, annual_km=annual_km, cfg=cfg, age=1.0)
+    sc_dt_old   = compute_opex(tech=0, annual_km=annual_km, cfg=cfg, age=10.0)
+    check("DT maintenance increases with age (age=10 > age=1)",
+          sc_dt_old.maintenance > sc_dt_young.maintenance,
+          f"age=1: {sc_dt_young.maintenance:.0f}  age=10: {sc_dt_old.maintenance:.0f}")
 
     # ── Salvage revenue decreases with age ────────────────
     sc_repl_young = compute_replacement_cost(new_tech=0, old_tech=0, old_age=2.0,
                                              annual_km=annual_km, cfg=cfg)
     sc_repl_old   = compute_replacement_cost(new_tech=0, old_tech=0, old_age=9.0,
                                              annual_km=annual_km, cfg=cfg)
-    check("ICT salvage_revenue decreases with age (age=9 < age=2)",
+    check("DT salvage_revenue decreases with age (age=9 < age=2)",
           sc_repl_old.salvage_revenue < sc_repl_young.salvage_revenue,
           f"age=2: {sc_repl_young.salvage_revenue:.0f}  age=9: {sc_repl_old.salvage_revenue:.0f}")
 
@@ -300,19 +300,19 @@ try:
 
     # ── PriceState override ───────────────────────────────
     ps_high = PriceState(diesel_price=cfg.diesel_price * 2)
-    sc_ict_high_diesel = compute_opex(tech=0, annual_km=annual_km, cfg=cfg,
+    sc_dt_high_diesel = compute_opex(tech=0, annual_km=annual_km, cfg=cfg,
                                       age=3.0, ps=ps_high)
     check("PriceState diesel override doubles fuel_energy cost",
-          abs(sc_ict_high_diesel.fuel_energy / sc_keep_ict.fuel_energy - 2.0) < 0.01,
-          f"ratio={sc_ict_high_diesel.fuel_energy / sc_keep_ict.fuel_energy:.3f}")
+          abs(sc_dt_high_diesel.fuel_energy / sc_keep_dt.fuel_energy - 2.0) < 0.01,
+          f"ratio={sc_dt_high_diesel.fuel_energy / sc_keep_dt.fuel_energy:.3f}")
 
     # Breakdowns
-    print(f"\n  Cost breakdown — keep ICT (age 5, {annual_km:.0f} km/yr):")
-    for k, v in sc_keep_ict.as_dict().items():
+    print(f"\n  Cost breakdown — keep DT (age 5, {annual_km:.0f} km/yr):")
+    for k, v in sc_keep_dt.as_dict().items():
         print(f"    {k:<20}: €{v:>12,.0f}")
 
-    print(f"\n  Cost breakdown — replace→ICT (age 5):")
-    for k, v in sc_repl_ict.as_dict().items():
+    print(f"\n  Cost breakdown — replace→DT (age 5):")
+    for k, v in sc_repl_dt.as_dict().items():
         print(f"    {k:<20}: €{v:>12,.0f}")
 
     print(f"\n  Cost breakdown — replace→BET (age 5, has_charger=True):")
@@ -352,11 +352,11 @@ try:
           float(obs.min()) >= 0.0 and float(obs.max()) <= 1.0,
           f"min={obs.min():.3f}  max={obs.max():.3f}")
     check("info has expected keys",
-          {"step","mean_age","mean_mileage","n_bet","n_ict","n_charger"} <= set(info.keys()))
+          {"step","mean_age","mean_mileage","n_bet","n_dt","n_charger"} <= set(info.keys()))
 
     # ── Initial fleet state after reset ──────────────────
     tech_features = obs[0:2*n:2]   # obs layout: [tech_0, mileage_0, tech_1, mileage_1, ...]
-    check("reset → all vehicles start as ICT (tech features == 0.0)",
+    check("reset → all vehicles start as DT (tech features == 0.0)",
           np.all(tech_features == 0.0),
           f"tech features: {tech_features}")
     ages = env.fleet_state[:, 1]
@@ -417,7 +417,7 @@ try:
     env_m.fleet_state[0] = [0.0, 1.0, annual_km_env]
     masks = env_m.action_masks().reshape(n, 3)
     check("age=1 → keep is valid",           bool(masks[0, 0]))
-    check("age=1 → replace ICT is masked",   not bool(masks[0, 1]))
+    check("age=1 → replace DT is masked",   not bool(masks[0, 1]))
     check("age=1 → replace BET is masked",   not bool(masks[0, 2]))
 
     # near lifetime limit: keep must be masked
@@ -429,15 +429,15 @@ try:
     check("near lifetime limit → keep is masked",       not bool(masks2[0, 0]))
     check("near lifetime limit → replace BET is valid", bool(masks2[0, 2]))
 
-    # ICT ban: after ban step, replace-with-ICT must be masked
-    if env_m.ict_ban_step < env_m.cfg.mdp.planning_horizon:
-        env_m.current_step = env_m.ict_ban_step
+    # DT ban: after ban step, replace-with-DT must be masked
+    if env_m.dt_ban_step < env_m.cfg.mdp.planning_horizon:
+        env_m.current_step = env_m.dt_ban_step
         env_m.fleet_state[0] = [0.0, 5.0, annual_km_env * 5]
         masks3 = env_m.action_masks().reshape(n, 3)
-        check("at ICT ban step → replace ICT is masked",   not bool(masks3[0, 1]))
-        check("at ICT ban step → replace BET is valid",    bool(masks3[0, 2]))
+        check("at DT ban step → replace DT is masked",   not bool(masks3[0, 1]))
+        check("at DT ban step → replace BET is valid",    bool(masks3[0, 2]))
     else:
-        check("ICT ban step within planning horizon (skipped)", True)
+        check("DT ban step within planning horizon (skipped)", True)
 
     # age-based forced replacement: age + 1 >= max_vehicle_age, mileage well below km limit
     env_m.current_step = 0
@@ -450,19 +450,19 @@ try:
     check("near max_vehicle_age (km ok) → keep is masked",       not bool(masks_age[0, 0]))
     check("near max_vehicle_age (km ok) → replace BET is valid", bool(masks_age[0, 2]))
 
-    # Combined: lifetime limit + ICT ban active → only BET valid
-    if env_m.ict_ban_step < env_m.cfg.mdp.planning_horizon:
-        env_m.current_step = env_m.ict_ban_step
+    # Combined: lifetime limit + DT ban active → only BET valid
+    if env_m.dt_ban_step < env_m.cfg.mdp.planning_horizon:
+        env_m.current_step = env_m.dt_ban_step
         env_m.fleet_state[0] = [
             0.0, 5.0,
             env_m.cfg.cost.max_lifetime_km - annual_km_env * 0.5,  # within one step of km limit
         ]
         masks_combo = env_m.action_masks().reshape(n, 3)
-        check("force-replace + ICT ban → keep is masked",        not bool(masks_combo[0, 0]))
-        check("force-replace + ICT ban → replace ICT is masked", not bool(masks_combo[0, 1]))
-        check("force-replace + ICT ban → replace BET is valid",  bool(masks_combo[0, 2]))
+        check("force-replace + DT ban → keep is masked",        not bool(masks_combo[0, 0]))
+        check("force-replace + DT ban → replace DT is masked", not bool(masks_combo[0, 1]))
+        check("force-replace + DT ban → replace BET is valid",  bool(masks_combo[0, 2]))
     else:
-        check("combined force-replace + ICT ban (no ban scenario, skipped)", True)
+        check("combined force-replace + DT ban (no ban scenario, skipped)", True)
 
     # ── Battery replacement fires correctly inside env ────
     # Construct a BET that is exactly at battery_replacement_age this step
@@ -484,20 +484,20 @@ try:
     env_ban = FleetReplacementEnv()
     obs_ban, _ = env_ban.reset(seed=0)
     ph = env_ban.cfg.mdp.planning_horizon
-    expected_ban0 = min(1.0, env_ban.ict_ban_step / ph)
+    expected_ban0 = min(1.0, env_ban.dt_ban_step / ph)
     check(f"ban_feature at step=0 == {expected_ban0:.3f}",
           abs(float(obs_ban[-1]) - expected_ban0) < 1e-6,
           f"got {obs_ban[-1]:.4f}")
 
-    if env_ban.ict_ban_step < ph:
-        env_ban.current_step = env_ban.ict_ban_step
+    if env_ban.dt_ban_step < ph:
+        env_ban.current_step = env_ban.dt_ban_step
         obs_at_ban = env_ban._get_obs()
-        check("ban_feature at step=ict_ban_step == 0.0",
+        check("ban_feature at step=dt_ban_step == 0.0",
               float(obs_at_ban[-1]) == 0.0,
               f"got {obs_at_ban[-1]:.4f}")
-        env_ban.current_step = env_ban.ict_ban_step + 1
+        env_ban.current_step = env_ban.dt_ban_step + 1
         obs_past_ban = env_ban._get_obs()
-        check("ban_feature one step past ict_ban_step stays 0.0",
+        check("ban_feature one step past dt_ban_step stays 0.0",
               float(obs_past_ban[-1]) == 0.0,
               f"got {obs_past_ban[-1]:.4f}")
     else:

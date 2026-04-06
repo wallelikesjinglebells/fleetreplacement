@@ -203,7 +203,7 @@ def policy_greedy_bet(env) -> np.ndarray:
     for i in range(n):
         if masks[i, 2]:            # BET replacement valid → do it
             actions[i] = 2
-        elif not masks[i, 0]:      # must replace but BET blocked → ICT
+        elif not masks[i, 0]:      # must replace but BET blocked → DT
             actions[i] = _best_valid(masks[i])
         # else: keep
     return actions
