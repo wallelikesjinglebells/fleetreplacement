@@ -42,7 +42,7 @@ SCENARIOS_COLS = [
     "subsidy_fallback_perc", "subsidy_fallback_max",
     "diesel_price_factor", "energy_price_factor",
     "toll_dt_factor", "toll_bet_multiplier", "toll_bet_share_dt", "tax_factor",
-    "maint_manual_factor", "driver_wage_factor", "tire_factor", "insurance_factor",
+    "maint_manual_factor", "driver_wage_factor", "insurance_factor",
     "capex_dt_factor", "capex_bet_factor",
     "residual_dt_truck_perc", "residual_bet_truck_perc", "residual_bat_perc",
     "dt_ban_year", "battery_replacement_age",
@@ -129,7 +129,7 @@ try:
     factor_fields = [
         "diesel_price_factor", "energy_price_factor", "capex_dt_factor",
         "capex_bet_factor", "maint_factor", "driver_wage_factor",
-        "tire_factor", "insurance_factor",
+        "insurance_factor",
     ]
     for field in factor_fields:
         val = getattr(cfg, field)
