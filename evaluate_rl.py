@@ -42,7 +42,7 @@ args = parser.parse_args()
 SCENARIO_NAME  = _SCENARIO_MAP[args.scenario]
 N_EPISODES     = args.episodes
 BASE_SEED      = args.seed
-_scenario_tag  = SCENARIO_NAME.replace(" ", "_").replace(":", "")
+_scenario_tag  = args.scenario
 MODEL_PATH     = f"./models/ppo_fleet_{_scenario_tag}/best_model"
 
 # ---------------------------------------------------------------------------

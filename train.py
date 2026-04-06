@@ -38,7 +38,7 @@ ENV_ID        = "FleetReplacement-v0"
 TOTAL_STEPS   = 7_000_000             # total number of environment steps to train
 N_ENVS        = 4                     # parallel environments for faster data collection
 EVAL_FREQ     = 10_000                # pause training every EVAL_FREQ steps to evaluate current policy on eval_env
-_scenario_tag = SCENARIO_NAME.replace(" ", "_").replace(":", "")
+_scenario_tag = args.scenario
 LOG_DIR       = f"./logs/{_scenario_tag}/"
 SAVE_PATH     = f"./models/ppo_fleet_{_scenario_tag}"
 
