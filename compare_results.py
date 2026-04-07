@@ -375,7 +375,7 @@ if args.plot:
     # --- Box plot ---
     fig, ax = plt.subplots(figsize=(12, 5))
     bp = ax.boxplot(
-        [results[n] for n in names],
+        [-results[n] for n in names],
         labels=names,
         patch_artist=True,
         medianprops={"color": "black", "linewidth": 1.5},
@@ -383,7 +383,7 @@ if args.plot:
     for patch, color in zip(bp["boxes"], colors):
         patch.set_facecolor(color)
         patch.set_alpha(0.7)
-    ax.set_ylabel("Total reward (EUR)")
+    ax.set_ylabel("Costs (EUR)")
     ax.set_title(f"Policy comparison — {SCENARIO_NAME}")
     ax.tick_params(axis="x", rotation=30)
     plt.tight_layout()
