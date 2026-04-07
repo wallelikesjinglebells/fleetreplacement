@@ -17,6 +17,10 @@ import gymnasium as gym
 import fleetreplacement_env
 from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config
 
+# Suppress TensorFlow oneDNN notifications before sb3_contrib imports TF
+os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
