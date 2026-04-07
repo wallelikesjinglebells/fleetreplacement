@@ -16,3 +16,6 @@ train_ds.py
 
 # TensorBoard Captures
 TensorBoard_shots/
+
+# Heatmaps
+heatmaps/
