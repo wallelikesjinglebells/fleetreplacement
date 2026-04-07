@@ -1,15 +1,17 @@
 """
-Heuristic baseline evaluation
+Baseline + RL evaluation (direct comparison)
 
-Runs several "manual" policies on the same environment and compares them against each other.
+Runs several "manual" policies and the trained MaskablePPO model on the same
+environment so that all results are directly comparable.
 
 Usage:
     python evaluate_heuristics.py SQ          # Status Quo (default)
     python evaluate_heuristics.py S1          # Scenario 1, etc.
-    python evaluate_heuristics.py SQ --trace  # also print step-by-step for best heuristic
+    python evaluate_heuristics.py SQ --trace  # also print step-by-step for best baseline + RL
 """
 
 import argparse
+import os
 import numpy as np
 import gymnasium as gym
 import fleetreplacement_env
@@ -29,27 +31,35 @@ _SCENARIO_MAP = {
 parser = argparse.ArgumentParser()
 parser.add_argument("scenario", choices=_SCENARIO_MAP, nargs="?", default="SQ")
 parser.add_argument("--episodes", type=int, default=50,
-                    help="Number of episodes per heuristic (default: 50)")
+                    help="Number of episodes per policy (default: 50)")
 parser.add_argument("--seed", type=int, default=42,
                     help="Base random seed (default: 42)")
 parser.add_argument("--trace", action="store_true",
-                    help="Print step-by-step output for the best heuristic")
+                    help="Print step-by-step output for the best baseline and the RL model")
 args = parser.parse_args()
 
-SCENARIO_NAME = _SCENARIO_MAP[args.scenario]
-N_EPISODES    = args.episodes
-BASE_SEED     = args.seed
+SCENARIO_NAME  = _SCENARIO_MAP[args.scenario]
+N_EPISODES     = args.episodes
+BASE_SEED      = args.seed
+MODEL_PATH     = f"./models/scenarios/ppo_fleet_{args.scenario}/best_model"
 
 # ---------------------------------------------------------------------------
-# Environment factory
+# Environment factories
 # ---------------------------------------------------------------------------
 def make_env(render_mode=None):
     cfg = FleetEnvConfig(mdp=MDPConfig(), cost=load_cost_config(scenario_name=SCENARIO_NAME))
     return gym.make("FleetReplacement-v0", config=cfg, render_mode=render_mode)
 
 
+def make_env_masked(render_mode=None):
+    """Wrapped environment for the RL model (ActionMasker required by MaskablePPO)."""
+    from sb3_contrib.common.wrappers import ActionMasker
+    env = make_env(render_mode=render_mode)
+    return ActionMasker(env, lambda e: e.unwrapped.action_masks())
+
+
 # ---------------------------------------------------------------------------
-# Heuristic helpers
+# Baseline helpers
 # ---------------------------------------------------------------------------
 def _masks(env) -> np.ndarray:
     """Returns masks as (n_vehicles, 3) bool array."""
@@ -66,7 +76,7 @@ def _best_valid(mask_row: np.ndarray, preference_order=(2, 0, 1)) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Heuristic policies
+# Baseline policies
 # Each function takes an env, reads fleet state, and returns an action array.
 # ---------------------------------------------------------------------------
 
@@ -210,7 +220,7 @@ def policy_greedy_bet(env) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# Episode runner
+# Episode runner (baselines)
 # ---------------------------------------------------------------------------
 def run_episode(policy_fn, env, seed=None, policy_kwargs=None) -> float:
     """Run one episode and return total (undiscounted by RL, discounted internally) reward."""
@@ -238,9 +248,33 @@ def evaluate_policy(policy_fn, policy_kwargs=None, n_episodes=N_EPISODES) -> np.
 
 
 # ---------------------------------------------------------------------------
-# All heuristics to benchmark
+# RL evaluation
 # ---------------------------------------------------------------------------
-HEURISTICS = [
+def evaluate_rl(n_episodes=N_EPISODES):
+    """Load the best saved MaskablePPO model and evaluate it."""
+    from sb3_contrib import MaskablePPO
+
+    model = MaskablePPO.load(MODEL_PATH)
+    env = make_env_masked()
+    rewards = []
+    for ep in range(n_episodes):
+        obs, _ = env.reset(seed=BASE_SEED + ep)
+        done = False
+        total_reward = 0.0
+        while not done:
+            action, _ = model.predict(obs, deterministic=True, action_masks=env.action_masks())
+            obs, reward, terminated, truncated, _ = env.step(action)
+            total_reward += reward
+            done = terminated or truncated
+        rewards.append(total_reward)
+    env.close()
+    return np.array(rewards), model
+
+
+# ---------------------------------------------------------------------------
+# All baselines to benchmark
+# ---------------------------------------------------------------------------
+BASELINES = [
     ("EOL to BET",          policy_eol_bet,               {}),
     ("Age>=4 to BET",       policy_age_threshold_bet,     {"threshold": 4}),
     ("Age>=5 to BET",       policy_age_threshold_bet,     {"threshold": 5}),
@@ -259,11 +293,11 @@ HEURISTICS = [
 # ---------------------------------------------------------------------------
 print(f"\nScenario : {SCENARIO_NAME}")
 print(f"Episodes : {N_EPISODES}  |  Base seed : {BASE_SEED}\n")
-print(f"{'Heuristic':<22} {'Mean (EUR)':>15} {'Std':>12} {'Best':>15} {'Worst':>15}")
+print(f"{'Policy':<22} {'Mean (EUR)':>15} {'Std':>12} {'Best':>15} {'Worst':>15}")
 print("-" * 82)
 
 results: dict[str, np.ndarray] = {}
-for name, fn, kwargs in HEURISTICS:
+for name, fn, kwargs in BASELINES:
     rewards = evaluate_policy(fn, policy_kwargs=kwargs)
     results[name] = rewards
     print(
@@ -274,26 +308,75 @@ for name, fn, kwargs in HEURISTICS:
         f"  {np.min(rewards):>14,.0f}"
     )
 
+# ---------------------------------------------------------------------------
+# RL model row
+# ---------------------------------------------------------------------------
+rl_model = None
+rl_rewards = None
+
+if os.path.exists(MODEL_PATH + ".zip"):
+    print("-" * 82)
+    rl_rewards, rl_model = evaluate_rl()
+    results["RL (PPO)"] = rl_rewards
+    print(
+        f"{'RL (PPO)':<22}"
+        f"  {np.mean(rl_rewards):>14,.0f}"
+        f"  {np.std(rl_rewards):>11,.0f}"
+        f"  {np.max(rl_rewards):>14,.0f}"
+        f"  {np.min(rl_rewards):>14,.0f}"
+    )
+else:
+    print(f"\n[RL] No model found at {MODEL_PATH}.zip — skipping RL evaluation.")
+
+# ---------------------------------------------------------------------------
+# Summary
+# ---------------------------------------------------------------------------
 best_name = max(results, key=lambda k: np.mean(results[k]))
 best_mean  = np.mean(results[best_name])
+best_baseline_name = max(
+    (k for k in results if k != "RL (PPO)"),
+    key=lambda k: np.mean(results[k])
+)
+best_baseline_mean = np.mean(results[best_baseline_name])
 
 print("-" * 82)
-print(f"\nBest heuristic : {best_name}  (mean EUR {best_mean:,.0f})")
-print(f"\nNote: compare the best heuristic mean against your RL model's eval/mean_reward.")
-print(f"      If RL < best heuristic, the model is underperforming a simple rule.\n")
+print(f"\nBest overall : {best_name}  (mean EUR {best_mean:,.0f})")
+print(f"Best baseline: {best_baseline_name}  (mean EUR {best_baseline_mean:,.0f})")
+if rl_rewards is not None:
+    rl_mean = np.mean(rl_rewards)
+    delta = rl_mean - best_baseline_mean
+    sign  = "+" if delta >= 0 else ""
+    print(f"RL vs best baseline: {sign}{delta:,.0f} EUR  "
+          f"({'above' if delta >= 0 else 'below'} baseline)")
+print()
 
 # ---------------------------------------------------------------------------
-# Optional: step-by-step trace for the best heuristic
+# Optional: step-by-step trace for the best baseline and the RL model
 # ---------------------------------------------------------------------------
 if args.trace:
-    fn_map = {name: (fn, kw) for name, fn, kw in HEURISTICS}
-    best_fn, best_kw = fn_map[best_name]
+    fn_map = {name: (fn, kw) for name, fn, kw in BASELINES}
+    best_fn, best_kw = fn_map[best_baseline_name]
 
     print(f"\n{'='*60}")
-    print(f"Step-by-step trace: {best_name}  (seed={BASE_SEED})")
+    print(f"Step-by-step trace (baseline): {best_baseline_name}  (seed={BASE_SEED})")
     print(f"{'='*60}")
-
     env = make_env(render_mode="human")
     total_reward = run_episode(best_fn, env, seed=BASE_SEED, policy_kwargs=best_kw)
     print(f"\nEpisode total reward: EUR {total_reward:,.0f}")
     env.close()
+
+    if rl_model is not None:
+        print(f"\n{'='*60}")
+        print(f"Step-by-step trace (RL): PPO best_model  (seed={BASE_SEED})")
+        print(f"{'='*60}")
+        env = make_env_masked(render_mode="human")
+        obs, _ = env.reset(seed=BASE_SEED)
+        done = False
+        total_reward = 0.0
+        while not done:
+            action, _ = rl_model.predict(obs, deterministic=True, action_masks=env.action_masks())
+            obs, reward, terminated, truncated, _ = env.step(action)
+            total_reward += reward
+            done = terminated or truncated
+        print(f"\nEpisode total reward: EUR {total_reward:,.0f}")
+        env.close()
