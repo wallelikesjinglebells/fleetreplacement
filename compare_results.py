@@ -366,24 +366,11 @@ if args.plot:
     os.makedirs("comparison_figures/SVGs", exist_ok=True)
 
     names  = list(results.keys())
-    means  = [np.mean(results[n]) for n in names]
-    stds   = [np.std(results[n])  for n in names]
     colors = ["steelblue"] * len(names)
     if "RL (PPO)" in names:
         colors[names.index("RL (PPO)")] = "darkorange"
 
     stem = f"comparison_{args.scenario}"
-
-    # --- Bar chart ---
-    fig, ax = plt.subplots(figsize=(12, 5))
-    ax.bar(names, means, yerr=stds, capsize=4, color=colors, edgecolor="black", linewidth=0.6)
-    ax.set_ylabel("Mean total reward (EUR)")
-    ax.set_title(f"Policy comparison — {SCENARIO_NAME}")
-    ax.tick_params(axis="x", rotation=30)
-    plt.tight_layout()
-    fig.savefig(f"comparison_figures/PNGs/{stem}_bar.png", dpi=150)
-    fig.savefig(f"comparison_figures/SVGs/{stem}_bar.svg")
-    plt.close(fig)
 
     # --- Box plot ---
     fig, ax = plt.subplots(figsize=(12, 5))
