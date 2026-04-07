@@ -19,3 +19,6 @@ TensorBoard_shots/
 
 # Heatmaps
 heatmaps/
+
+# Comparison figures
+comparison_figures/
