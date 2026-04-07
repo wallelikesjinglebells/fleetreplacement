@@ -39,7 +39,7 @@ TOTAL_STEPS   = 7_000_000             # total number of environment steps to tra
 N_ENVS        = 4                     # parallel environments for faster data collection
 EVAL_FREQ     = 10_000                # pause training every EVAL_FREQ steps to evaluate current policy on eval_env
 _scenario_tag = args.scenario
-LOG_DIR       = f"./logs/{_scenario_tag}/"
+LOG_DIR       = f"./logs/scenarios/{_scenario_tag}/"
 SAVE_PATH     = f"./models/ppo_fleet_{_scenario_tag}"
 
 # Wrap env with ActionMasker, loading the correct scenario config
