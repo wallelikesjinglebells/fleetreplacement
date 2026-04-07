@@ -40,7 +40,7 @@ N_ENVS        = 4                     # parallel environments for faster data co
 EVAL_FREQ     = 10_000                # pause training every EVAL_FREQ steps to evaluate current policy on eval_env
 _scenario_tag = args.scenario
 LOG_DIR       = f"./logs/scenarios/{_scenario_tag}/"
-SAVE_PATH     = f"./models/ppo_fleet_{_scenario_tag}"
+SAVE_PATH     = f"./models/scenarios/ppo_fleet_{_scenario_tag}"
 
 # Wrap env with ActionMasker, loading the correct scenario config
 def make_masked_env():
