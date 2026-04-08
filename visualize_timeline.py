@@ -17,6 +17,10 @@ import argparse
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import scienceplots
+plt.style.use(["science", "nature", "grid"])
+plt.rcParams["text.usetex"] = False
+plt.rcParams["font.family"] = "Arial"
 import gymnasium as gym
 import fleetreplacement_env
 from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config

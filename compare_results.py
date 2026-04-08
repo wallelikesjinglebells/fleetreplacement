@@ -13,6 +13,11 @@ Usage:
 import argparse
 import os
 import numpy as np
+import matplotlib.pyplot as plt
+import scienceplots
+plt.style.use(["science", "nature", "grid"])
+plt.rcParams["text.usetex"] = False
+plt.rcParams["font.family"] = "Arial"
 import gymnasium as gym
 import fleetreplacement_env
 from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config
@@ -357,7 +362,6 @@ print()
 # ---------------------------------------------------------------------------
 # Plots
 # ---------------------------------------------------------------------------
-import matplotlib.pyplot as plt
 
 os.makedirs("comparison_figures/PNGs", exist_ok=True)
 os.makedirs("comparison_figures/SVGs", exist_ok=True)
@@ -388,7 +392,10 @@ fig.savefig(f"comparison_figures/PNGs/{stem}_box.png", dpi=150)
 fig.savefig(f"comparison_figures/SVGs/{stem}_box.svg")
 plt.close(fig)
 
-print(f"Plots saved to comparison_figures/PNGs/ and comparison_figures/SVGs/")
+print(f"Saved: {svg_path}")
+print(f"Saved: {png_path}")
+
+plt.show()
 
 # ---------------------------------------------------------------------------
 # Optional: step-by-step trace for the best baseline and the RL model
