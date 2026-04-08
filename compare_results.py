@@ -335,6 +335,10 @@ def plot_comparison(results: dict[str, np.ndarray]):
         ax.yaxis.set_major_formatter(millions)
         ax.yaxis.get_offset_text().set_visible(False)
 
+    # Otional: remove vertical grid lines
+    # ax_top.xaxis.grid(False)
+    # ax_bot.xaxis.grid(False)
+
     # Hide the touching spines to create the visual break
     ax_top.spines["bottom"].set_visible(False)
     ax_bot.spines["top"].set_visible(False)
