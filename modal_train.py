@@ -78,7 +78,7 @@ def train_scenario(scenario: str):
 
     SCENARIO_NAME = SCENARIO_MAP[scenario]
     ENV_ID        = "FleetReplacement-v0"
-    TOTAL_STEPS   = 3_000_000
+    TOTAL_STEPS   = 5_000_000
     N_ENVS        = 16
     EVAL_FREQ     = 10_000
     LOG_DIR       = f"{VOLUME_PATH}/logs/scenarios/{scenario}/"
@@ -120,7 +120,7 @@ def train_scenario(scenario: str):
         n_epochs=10,
         gamma=1.0,
         tensorboard_log=LOG_DIR,
-        ent_coef=0.01,
+        ent_coef=0.05,
         policy_kwargs=dict(net_arch=[256, 256]),
     )
 
