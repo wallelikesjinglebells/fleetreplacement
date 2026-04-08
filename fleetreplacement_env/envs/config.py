@@ -17,7 +17,7 @@ class MDPConfig:
     n_vehicles: int = 10            # fleet size
     max_possible_vehicle_age: int = 0       # max max_vehicle_age across all scenarios, used for obs normalization; set via load_max_vehicle_age()
     max_possible_lifetime_km: float = 0.0   # max max_lifetime_km across all scenarios, used for obs normalization; set via load_max_lifetime_km()
-    planning_horizon: int = 20      # planning time horizon in years (when is one training episode over?)
+    planning_horizon: int = 30      # planning time horizon in years (when is one training episode over?)
     start_year: int = 2026          # current year (needed for calculating DT purchase ban step)
 
 # Cost parameters for costs.py
