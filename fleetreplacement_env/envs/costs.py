@@ -188,6 +188,7 @@ def _market_value(
 def _bet_subsidy(
     cfg: CostConfig,
     capex_bet_total: float,
+    current_year: int,
     ps: Optional[PriceState] = None,
 ) -> float:
     """
@@ -197,10 +198,10 @@ def _bet_subsidy(
     capex_dt_ref = _capex_dt_gross(cfg, ps)
     premium = max(0.0, capex_bet_total - capex_dt_ref)             # premium for BET (Clara: "diff"), prevent negative value if BET price is lower than DT
 
-    if cfg.subsidy_perc > 0 or cfg.subsidy_max > 0:
+    if current_year <= cfg.subsidy_expiry_year:
         return min(premium * cfg.subsidy_perc, cfg.subsidy_max)
 
-    # Fallback (scenario with expired subsidy programme)
+    # Fallback: subsidy programme has expired
     return min(capex_bet_total * cfg.subsidy_fallback_perc, cfg.subsidy_fallback_max)
 
 
@@ -210,6 +211,7 @@ def compute_replacement_cost(
     old_age: float,
     annual_km: float,
     cfg: CostConfig,
+    current_year: int,
     has_charger: bool = True,
     n_charger: int = 0,
     ps: Optional[PriceState] = None,
@@ -218,13 +220,14 @@ def compute_replacement_cost(
     Lump-sum cost for replacing a vehicle in the current timestep
 
     Parameters
-    new_tech    : 0 = DT, 1 = BET
-    old_tech    : technology of the vehicle being retired
-    old_age     : age of the vehicle being retired, in years
-    cfg         : CostConfig (Germany, manual drivetrain)
-    has_charger : True if this vehicle slot already has a charger installed
-    n_charger   : number of charger slots installed in the fleet before this purchase
-    ps          : optional stochastic price overrides
+    new_tech     : 0 = DT, 1 = BET
+    old_tech     : technology of the vehicle being retired
+    old_age      : age of the vehicle being retired, in years
+    cfg          : CostConfig (Germany, manual drivetrain)
+    current_year : calendar year of the purchase (used for subsidy expiry check)
+    has_charger  : True if this vehicle slot already has a charger installed
+    n_charger    : number of charger slots installed in the fleet before this purchase
+    ps           : optional stochastic price overrides
 
     Returns
     StepCost
@@ -239,7 +242,7 @@ def compute_replacement_cost(
         capex_truck = _capex_bet_truck_gross(cfg, ps)
         capex_bat = _battery_cost(cfg, ps)
         cost.capex_gross = capex_truck + capex_bat
-        cost.subsidy = _bet_subsidy(cfg, cost.capex_gross, ps)
+        cost.subsidy = _bet_subsidy(cfg, cost.capex_gross, current_year, ps)
 
         if not has_charger:
             if n_charger == 0:
@@ -339,6 +342,7 @@ def compute_step_cost(
     action: int,
     annual_km: float,
     cfg: CostConfig,
+    current_year: int,
     has_charger: bool = True,
     n_charger: int = 0,
     ps: Optional[PriceState] = None,
@@ -347,14 +351,15 @@ def compute_step_cost(
     Unified entry point for fleet_replacement.py step()
 
     Parameters
-    tech        : current vehicle technology (0=DT, 1=BET)
-    age         : current vehicle age in years
-    action      : 0=keep, 1=replace with DT, 2=replace with BET
-    annual_km   : km driven this step, uses cfg.akt_base as default
-    cfg         : CostConfig
-    has_charger : True if this vehicle slot already has a charger installed
-    n_charger   : number of charger slots installed in the fleet before this purchase
-    ps          : optional stochastic price overrides
+    tech         : current vehicle technology (0=DT, 1=BET)
+    age          : current vehicle age in years
+    action       : 0=keep, 1=replace with DT, 2=replace with BET
+    annual_km    : km driven this step, uses cfg.akt_base as default
+    cfg          : CostConfig
+    current_year : calendar year of this step (used for subsidy expiry check)
+    has_charger  : True if this vehicle slot already has a charger installed
+    n_charger    : number of charger slots installed in the fleet before this purchase
+    ps           : optional stochastic price overrides
 
     Returns
     StepCost (.total gives the scalar cost in fleet_replacement.py)
@@ -363,10 +368,11 @@ def compute_step_cost(
         return compute_opex(tech=tech, annual_km=annual_km, cfg=cfg, age=age, ps=ps)
     elif action == 1:
         return compute_replacement_cost(
-            new_tech=0, old_tech=int(tech), old_age=age, annual_km=annual_km, cfg=cfg, ps=ps
+            new_tech=0, old_tech=int(tech), old_age=age, annual_km=annual_km,
+            cfg=cfg, current_year=current_year, ps=ps
         )
     else:  # action == 2
         return compute_replacement_cost(
-            new_tech=1, old_tech=int(tech), old_age=age, annual_km=annual_km, cfg=cfg,
-            has_charger=has_charger, n_charger=n_charger, ps=ps
+            new_tech=1, old_tech=int(tech), old_age=age, annual_km=annual_km,
+            cfg=cfg, current_year=current_year, has_charger=has_charger, n_charger=n_charger, ps=ps
         )

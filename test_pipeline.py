@@ -38,7 +38,7 @@ TRUCKS_COLS = [
 SCENARIOS_COLS = [
     "name", "i_rate", "n_years", "bat_cap_factor", "price_kwh_factor",
     "efficiency_factor_dt", "efficiency_factor_bet", "max_lifetime_km", "max_vehicle_age",
-    "subsidy_perc", "subsidy_fallback_perc", "subsidy_fallback_max",
+    "subsidy_perc", "subsidy_expiry_year", "subsidy_fallback_perc", "subsidy_fallback_max",
     "diesel_price_factor", "energy_price_factor",
     "toll_dt_factor", "toll_bet_multiplier", "toll_bet_share_dt", "tax_factor",
     "maint_manual_factor", "driver_wage_factor", "insurance_factor",
@@ -164,14 +164,14 @@ try:
 
     # Action 0: keep DT
     sc_keep_dt = compute_step_cost(tech=0, age=5.0, action=0,
-                                    annual_km=annual_km, cfg=cfg)
+                                    annual_km=annual_km, cfg=cfg, current_year=2026)
     check("keep DT  → opex_total > 0",  sc_keep_dt.opex_total > 0,
           f"got {sc_keep_dt.opex_total:.0f}")
     check("keep DT  → capex_gross == 0", sc_keep_dt.capex_gross == 0.0)
 
     # Action 1: replace with DT
     sc_repl_dt = compute_step_cost(tech=0, age=5.0, action=1,
-                                    annual_km=annual_km, cfg=cfg)
+                                    annual_km=annual_km, cfg=cfg, current_year=2026)
     check("replace→DT → capex_gross > 0", sc_repl_dt.capex_gross > 0,
           f"got {sc_repl_dt.capex_gross:.0f}")
     check("replace→DT → salvage_revenue > 0 (age=5)", sc_repl_dt.salvage_revenue > 0,
@@ -181,7 +181,7 @@ try:
 
     # Action 2: replace with BET (slot already has charger → no infra cost)
     sc_repl_bet = compute_step_cost(tech=0, age=5.0, action=2,
-                                    annual_km=annual_km, cfg=cfg,
+                                    annual_km=annual_km, cfg=cfg, current_year=2026,
                                     has_charger=True, n_charger=1)
     check("replace→BET → capex_gross > DT capex",
           sc_repl_bet.capex_gross > sc_repl_dt.capex_gross,
@@ -195,7 +195,7 @@ try:
 
     # Infrastructure cost: first BET ever (n_charger=0, no charger at slot)
     sc_first_bet = compute_step_cost(tech=0, age=5.0, action=2,
-                                     annual_km=annual_km, cfg=cfg,
+                                     annual_km=annual_km, cfg=cfg, current_year=2026,
                                      has_charger=False, n_charger=0)
     expected_first = cfg.construction_cost_contrib + cfg.charger_price
     check(f"first BET (n_charger=0) → infra_cost == construction + charger ({expected_first:,.0f})",
@@ -204,7 +204,7 @@ try:
 
     # Infrastructure cost: subsequent BET (n_charger=5, no charger at slot)
     sc_next_bet = compute_step_cost(tech=0, age=5.0, action=2,
-                                    annual_km=annual_km, cfg=cfg,
+                                    annual_km=annual_km, cfg=cfg, current_year=2026,
                                     has_charger=False, n_charger=5)
     check(f"subsequent BET (n_charger=5) → infra_cost == charger_price ({cfg.charger_price:,.0f})",
           sc_next_bet.infra_cost == cfg.charger_price,
@@ -212,7 +212,7 @@ try:
 
     # Infrastructure cost: depot full (n_charger=10)
     sc_full_depot = compute_step_cost(tech=0, age=5.0, action=2,
-                                      annual_km=annual_km, cfg=cfg,
+                                      annual_km=annual_km, cfg=cfg, current_year=2026,
                                       has_charger=False, n_charger=10)
     check("BET with n_charger=10 → infra_cost == 0",
           sc_full_depot.infra_cost == 0.0,
@@ -220,7 +220,7 @@ try:
 
     # Keep BET (age 3)
     sc_keep_bet = compute_step_cost(tech=1, age=3.0, action=0,
-                                    annual_km=annual_km, cfg=cfg)
+                                    annual_km=annual_km, cfg=cfg, current_year=2026)
     check("keep BET  → opex_total > 0", sc_keep_bet.opex_total > 0,
           f"got {sc_keep_bet.opex_total:.0f}")
     check("keep BET (age 3) → no battery_replacement",
@@ -233,7 +233,7 @@ try:
                          * cfg.price_kwh_base * cfg.price_kwh_factor)
 
     sc_bat_hit = compute_step_cost(tech=1, age=float(repl_age), action=0,
-                                   annual_km=annual_km, cfg=cfg)
+                                   annual_km=annual_km, cfg=cfg, current_year=2026)
     check(f"BET at age={repl_age} → battery_replacement > 0",
           sc_bat_hit.battery_replacement > 0,
           f"got {sc_bat_hit.battery_replacement:.0f}")
@@ -244,20 +244,20 @@ try:
     for off_age in [repl_age - 1, repl_age + 1]:
         if off_age > 0:
             sc_no_bat = compute_step_cost(tech=1, age=float(off_age), action=0,
-                                          annual_km=annual_km, cfg=cfg)
+                                          annual_km=annual_km, cfg=cfg, current_year=2026)
             check(f"BET at age={off_age} (≠ repl_age) → battery_replacement == 0",
                   sc_no_bat.battery_replacement == 0.0,
                   f"got {sc_no_bat.battery_replacement:.0f}")
 
     sc_dt_at_repl = compute_step_cost(tech=0, age=float(repl_age), action=0,
-                                       annual_km=annual_km, cfg=cfg)
+                                       annual_km=annual_km, cfg=cfg, current_year=2026)
     check("DT at battery_replacement_age → battery_replacement == 0",
           sc_dt_at_repl.battery_replacement == 0.0,
           f"got {sc_dt_at_repl.battery_replacement:.0f}")
 
     # Newly replaced BET (age=0 in replacement year) must not trigger battery replacement
     sc_new_bet = compute_step_cost(tech=1, age=0.0, action=0,
-                                   annual_km=annual_km, cfg=cfg)
+                                   annual_km=annual_km, cfg=cfg, current_year=2026)
     check("BET at age=0 (replacement year) → battery_replacement == 0",
           sc_new_bet.battery_replacement == 0.0,
           f"got {sc_new_bet.battery_replacement:.0f}")
@@ -271,17 +271,17 @@ try:
 
     # ── Salvage revenue decreases with age ────────────────
     sc_repl_young = compute_replacement_cost(new_tech=0, old_tech=0, old_age=2.0,
-                                             annual_km=annual_km, cfg=cfg)
+                                             annual_km=annual_km, cfg=cfg, current_year=2026)
     sc_repl_old   = compute_replacement_cost(new_tech=0, old_tech=0, old_age=9.0,
-                                             annual_km=annual_km, cfg=cfg)
+                                             annual_km=annual_km, cfg=cfg, current_year=2026)
     check("DT salvage_revenue decreases with age (age=9 < age=2)",
           sc_repl_old.salvage_revenue < sc_repl_young.salvage_revenue,
           f"age=2: {sc_repl_young.salvage_revenue:.0f}  age=9: {sc_repl_old.salvage_revenue:.0f}")
 
     sc_bet_repl_young = compute_replacement_cost(new_tech=1, old_tech=1, old_age=2.0,
-                                                 annual_km=annual_km, cfg=cfg)
+                                                 annual_km=annual_km, cfg=cfg, current_year=2026)
     sc_bet_repl_old   = compute_replacement_cost(new_tech=1, old_tech=1, old_age=9.0,
-                                                 annual_km=annual_km, cfg=cfg)
+                                                 annual_km=annual_km, cfg=cfg, current_year=2026)
     check("BET salvage_revenue decreases with age (age=9 < age=2)",
           sc_bet_repl_old.salvage_revenue < sc_bet_repl_young.salvage_revenue,
           f"age=2: {sc_bet_repl_young.salvage_revenue:.0f}  age=9: {sc_bet_repl_old.salvage_revenue:.0f}")
@@ -462,7 +462,7 @@ try:
     from fleetreplacement_env.envs.costs import compute_step_cost as _csc
     cost_item = _csc(
         tech=1, age=float(bra), action=0,
-        annual_km=annual_km_env, cfg=env_b.cfg.cost,
+        annual_km=annual_km_env, cfg=env_b.cfg.cost, current_year=2026,
     )
     check(f"env: BET at battery_replacement_age={bra} → step cost includes battery_replacement",
           cost_item.battery_replacement > 0,
@@ -474,24 +474,24 @@ try:
     ph = env_ban.cfg.mdp.planning_horizon
     expected_ban0 = min(1.0, env_ban.dt_ban_step / ph)
     check(f"ban_feature at step=0 == {expected_ban0:.3f}",
-          abs(float(obs_ban[-1]) - expected_ban0) < 1e-6,
-          f"got {obs_ban[-1]:.4f}")
+          abs(float(obs_ban[-2]) - expected_ban0) < 1e-6,
+          f"got {obs_ban[-2]:.4f}")
 
     if env_ban.dt_ban_step < ph:
         env_ban.current_step = env_ban.dt_ban_step
         obs_at_ban = env_ban._get_obs()
         check("ban_feature at step=dt_ban_step == 0.0",
-              float(obs_at_ban[-1]) == 0.0,
-              f"got {obs_at_ban[-1]:.4f}")
+              float(obs_at_ban[-2]) == 0.0,
+              f"got {obs_at_ban[-2]:.4f}")
         env_ban.current_step = env_ban.dt_ban_step + 1
         obs_past_ban = env_ban._get_obs()
         check("ban_feature one step past dt_ban_step stays 0.0",
-              float(obs_past_ban[-1]) == 0.0,
-              f"got {obs_past_ban[-1]:.4f}")
+              float(obs_past_ban[-2]) == 0.0,
+              f"got {obs_past_ban[-2]:.4f}")
     else:
         check("ban_feature (no ban scenario) == 1.0 throughout",
-              float(obs_ban[-1]) == 1.0,
-              f"got {obs_ban[-1]:.4f}")
+              float(obs_ban[-2]) == 1.0,
+              f"got {obs_ban[-2]:.4f}")
 
     # ── Mileage normalization boundary ───────────────────
     env_ml = FleetReplacementEnv()

@@ -78,6 +78,7 @@ class CostConfig:
 
     # Subsidy
     subsidy_perc: float
+    subsidy_expiry_year: int
     subsidy_fallback_perc: float
     subsidy_fallback_max: float
     diesel_price_factor: float
@@ -189,6 +190,7 @@ def load_cost_config(
         max_lifetime_km = get_float(scen, "max_lifetime_km"),
         max_vehicle_age = int(get_float(scen, "max_vehicle_age")),
         subsidy_perc = get_float(scen, "subsidy_perc"),
+        subsidy_expiry_year = int(get_float(scen, "subsidy_expiry_year")),
         subsidy_fallback_perc = get_float(scen, "subsidy_fallback_perc"),
         subsidy_fallback_max = get_float(scen, "subsidy_fallback_max"),
         diesel_price_factor = get_float(scen, "diesel_price_factor"),

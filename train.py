@@ -83,7 +83,7 @@ model = MaskablePPO(
     gamma=1.0,              # env already applies economic discounting in reward, no additional discounting needed
     tensorboard_log=LOG_DIR,
     ent_coef=0.01,          # entropy coefficient for loss calculation (PPO is rewarded for exploring all actions)
-    policy_kwargs=dict(net_arch=[256, 256]),  # larger network than default [64, 64] for 22-dim obs and 3^10 action space
+    policy_kwargs=dict(net_arch=[256, 256]),  # larger network than default [64, 64] for 23-dim obs and 3^10 action space
 )
 
 # Train

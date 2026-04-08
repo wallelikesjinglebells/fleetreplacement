@@ -44,8 +44,8 @@ class FleetReplacementEnv(gym.Env):
         # State space as box, matrix of shape (n_vehicles, 2 (technology, mileage))
         # After including n_charger and steps_to_ban: vector with n_vehicles*2+2 elements
         self.observation_space = spaces.Box(
-            low  = np.zeros(n_vehicles * 2 + 2, dtype=np.float32),
-            high = np.ones( n_vehicles * 2 + 2, dtype=np.float32),
+            low  = np.zeros(n_vehicles * 2 + 3, dtype=np.float32),
+            high = np.ones( n_vehicles * 2 + 3, dtype=np.float32),
             dtype = np.float32
         )
 
@@ -53,8 +53,12 @@ class FleetReplacementEnv(gym.Env):
         self.action_space = spaces.MultiDiscrete([3] * n_vehicles)        # 0=keep, 1=replace with DT, 2=replace with BET
 
         # Derive DT purchase ban step from calendar year, limit to [0, planning_horizon]
-        raw_ban_step = self.cfg.cost.dt_ban_year - self.cfg.mdp.start_year 
+        raw_ban_step = self.cfg.cost.dt_ban_year - self.cfg.mdp.start_year
         self.dt_ban_step = max(0, min(raw_ban_step, self.cfg.mdp.planning_horizon))
+
+        # Derive subsidy expiry step from calendar year (9999 → always active within horizon)
+        raw_expiry_step = self.cfg.cost.subsidy_expiry_year - self.cfg.mdp.start_year
+        self.subsidy_expiry_step = max(0, min(raw_expiry_step, self.cfg.mdp.planning_horizon))
 
     # Constructing observations for NN
     def _get_obs(self):
@@ -67,7 +71,10 @@ class FleetReplacementEnv(gym.Env):
         # Steps to DT ban
         steps_to_ban = max(0, self.dt_ban_step - self.current_step)
         ban_feature = np.array([min(1.0, steps_to_ban / self.cfg.mdp.planning_horizon)], dtype=np.float32)                                      # normalize; 1.0 if ban is beyond horizon (S1/S2), decreases to 0 as ban approaches
-        return np.concatenate([flat_fleet, charger_feature, ban_feature])
+        # Steps until subsidy expiry
+        steps_to_expiry = max(0, self.subsidy_expiry_step - self.current_step)
+        subsidy_feature = np.array([min(1.0, steps_to_expiry / self.cfg.mdp.planning_horizon)], dtype=np.float32)                               # normalize; 1.0 if expiry is beyond horizon (S3/S4), decreases to 0 as expiry approaches
+        return np.concatenate([flat_fleet, charger_feature, ban_feature, subsidy_feature])
     
     def _get_info(self):
         return {
@@ -136,6 +143,7 @@ class FleetReplacementEnv(gym.Env):
                 action=act,
                 annual_km=self.cfg.cost.akt_base,
                 cfg=self.cfg.cost,
+                current_year=self.cfg.mdp.start_year + self.current_step,
                 has_charger=bool(self.charger_slots[i]),
                 n_charger=int(self.charger_slots.sum()),
             )
