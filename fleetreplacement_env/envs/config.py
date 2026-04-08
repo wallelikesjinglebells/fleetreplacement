@@ -105,9 +105,6 @@ class CostConfig:
     # DT ban year
     dt_ban_year: int
 
-    # Battery replacement age (years)
-    battery_replacement_age: int
-
     # Max vehicle age before forced retirement (years)
     max_vehicle_age: int
 
@@ -174,7 +171,7 @@ def load_cost_config(
         bat_cap = get_float(bet, "bat_cap"),
         price_kwh_base = get_float(bet, "price_kwh_base"),
         consumption_bet = get_float(bet, "consumption"),
-        maint_age_factor_bet = get_float(bet, "maint_age_factor"),
+        maint_age_factor_bet = get_float(scen, "maint_age_factor_bet"),
 
         # --- trucks.csv (shared) ---
         akt_base = get_float(dt, "akt_base"),
@@ -208,7 +205,6 @@ def load_cost_config(
         residual_bet_truck_perc = get_float(scen, "residual_bet_truck_perc"),
         residual_bat_perc = get_float(scen, "residual_bat_perc"),
         dt_ban_year = int(get_float(scen, "dt_ban_year")),
-        battery_replacement_age = int(get_float(scen, "battery_replacement_age")),
 
     )
 

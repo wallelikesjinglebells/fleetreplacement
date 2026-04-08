@@ -329,10 +329,6 @@ def compute_opex(
         cost.insurance = cfg.insurance_base * cfg.insurance_factor      # adapted from Clara: class BET → self.cost_breakdown["Insurance"]
         cost.tax = cfg.tax * cfg.tax_factor                             # adapted from Clara: class BET → self.cost_breakdown["Tax"]
 
-        # Mid-life battery replacement
-        if age == cfg.battery_replacement_age:
-            cost.battery_replacement = _battery_cost(cfg, ps)
-
     return cost
 
 

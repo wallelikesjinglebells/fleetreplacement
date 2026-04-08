@@ -44,7 +44,7 @@ SCENARIOS_COLS = [
     "maint_manual_factor", "driver_wage_factor", "insurance_factor",
     "capex_dt_factor", "capex_bet_factor",
     "residual_dt_truck_perc", "residual_bet_truck_perc", "residual_bat_perc",
-    "dt_ban_year", "battery_replacement_age",
+    "dt_ban_year", "maint_age_factor_bet",
 ]
 
 try:
@@ -80,9 +80,9 @@ try:
               f"missing from {list(df_s.columns)}")
     check("'Status Quo' scenario row exists",
           (df_s["name"] == "Status Quo").sum() == 1)
-    if "battery_replacement_age" in df_s.columns:
-        vals = df_s["battery_replacement_age"].dropna()
-        check("battery_replacement_age > 0 in all scenarios",
+    if "maint_age_factor_bet" in df_s.columns:
+        vals = df_s["maint_age_factor_bet"].dropna()
+        check("maint_age_factor_bet > 0 in all scenarios",
               (vals > 0).all(), f"values: {vals.tolist()}")
 except Exception as e:
     check("scenarios.csv loads", False, str(e))
@@ -124,10 +124,10 @@ try:
         check(f"  cfg.{field} is finite & > 0  (got {val:.4g})",
               np.isfinite(val) and val > 0)
 
-    # battery_replacement_age: must be a positive integer
-    bra = cfg.battery_replacement_age
-    check(f"  cfg.battery_replacement_age is int  (got {bra!r})", isinstance(bra, int))
-    check(f"  cfg.battery_replacement_age > 0  (got {bra})", bra > 0)
+    # maint_age_factor_bet: must be a positive float
+    mafb = cfg.maint_age_factor_bet
+    check(f"  cfg.maint_age_factor_bet is finite & > 0  (got {mafb:.4g})",
+          np.isfinite(mafb) and mafb > 0)
 
     mdp = MDPConfig()
     check("MDPConfig() constructs OK", mdp.n_vehicles == 10)
@@ -227,40 +227,12 @@ try:
           sc_keep_bet.battery_replacement == 0.0,
           f"got {sc_keep_bet.battery_replacement:.0f}")
 
-    # ── Mid-life battery replacement (age-based) ──────────
-    repl_age = cfg.battery_replacement_age
-    expected_bat_cost = (cfg.bat_cap * cfg.bat_cap_factor
-                         * cfg.price_kwh_base * cfg.price_kwh_factor)
-
-    sc_bat_hit = compute_step_cost(tech=1, age=float(repl_age), action=0,
-                                   annual_km=annual_km, cfg=cfg, current_year=2026)
-    check(f"BET at age={repl_age} → battery_replacement > 0",
-          sc_bat_hit.battery_replacement > 0,
-          f"got {sc_bat_hit.battery_replacement:.0f}")
-    check(f"BET at age={repl_age} → battery_replacement == expected ({expected_bat_cost:,.0f})",
-          abs(sc_bat_hit.battery_replacement - expected_bat_cost) < 1.0,
-          f"got {sc_bat_hit.battery_replacement:.0f}")
-
-    for off_age in [repl_age - 1, repl_age + 1]:
-        if off_age > 0:
-            sc_no_bat = compute_step_cost(tech=1, age=float(off_age), action=0,
-                                          annual_km=annual_km, cfg=cfg, current_year=2026)
-            check(f"BET at age={off_age} (≠ repl_age) → battery_replacement == 0",
-                  sc_no_bat.battery_replacement == 0.0,
-                  f"got {sc_no_bat.battery_replacement:.0f}")
-
-    sc_dt_at_repl = compute_step_cost(tech=0, age=float(repl_age), action=0,
-                                       annual_km=annual_km, cfg=cfg, current_year=2026)
-    check("DT at battery_replacement_age → battery_replacement == 0",
-          sc_dt_at_repl.battery_replacement == 0.0,
-          f"got {sc_dt_at_repl.battery_replacement:.0f}")
-
-    # Newly replaced BET (age=0 in replacement year) must not trigger battery replacement
-    sc_new_bet = compute_step_cost(tech=1, age=0.0, action=0,
-                                   annual_km=annual_km, cfg=cfg, current_year=2026)
-    check("BET at age=0 (replacement year) → battery_replacement == 0",
-          sc_new_bet.battery_replacement == 0.0,
-          f"got {sc_new_bet.battery_replacement:.0f}")
+    # ── BET maintenance increases with age (battery amortisation) ─────
+    sc_bet_young = compute_opex(tech=1, annual_km=annual_km, cfg=cfg, age=1.0)
+    sc_bet_old   = compute_opex(tech=1, annual_km=annual_km, cfg=cfg, age=7.0)
+    check("BET maintenance increases with age (age=7 > age=1)",
+          sc_bet_old.maintenance > sc_bet_young.maintenance,
+          f"age=1: {sc_bet_young.maintenance:.0f}  age=7: {sc_bet_old.maintenance:.0f}")
 
     # ── Age-dependent maintenance (DT) ──────────────────
     sc_dt_young = compute_opex(tech=0, annual_km=annual_km, cfg=cfg, age=1.0)
@@ -373,9 +345,9 @@ try:
           info3["n_bet"] == n, f"n_bet={info3['n_bet']}, n={n}")
     check("replace all BET → n_charger == n_vehicles after step",
           info3["n_charger"] == n, f"n_charger={info3['n_charger']}, n={n}")
-    check("replace all BET → obs[-2] (charger share) == 1.0",
-          abs(float(obs3[-2]) - 1.0) < 1e-6,
-          f"got {obs3[-2]:.4f}")
+    check("replace all BET → obs[-3] (charger share) == 1.0",
+          abs(float(obs3[-3]) - 1.0) < 1e-6,
+          f"got {obs3[-3]:.4f}")
 
     # Replace half the fleet with BET: charger share == 0.5
     env.reset(seed=42)
@@ -383,9 +355,9 @@ try:
     action_half_bet = np.zeros(n, dtype=np.int32)
     action_half_bet[:half] = 2
     obs_half, _, _, _, _ = env.step(action_half_bet)
-    check(f"replace {half}/{n} with BET → obs[-2] (charger share) == {half/n:.2f}",
-          abs(float(obs_half[-2]) - half / n) < 1e-6,
-          f"got {obs_half[-2]:.4f}")
+    check(f"replace {half}/{n} with BET → obs[-3] (charger share) == {half/n:.2f}",
+          abs(float(obs_half[-3]) - half / n) < 1e-6,
+          f"got {obs_half[-3]:.4f}")
 
     # Charger slot persistence: after replacing with BET, charger_slots must stay True
     env.reset(seed=42)
@@ -452,21 +424,17 @@ try:
     else:
         check("combined force-replace + DT ban (no ban scenario, skipped)", True)
 
-    # ── Battery replacement fires correctly inside env ────
-    # Construct a BET that is exactly at battery_replacement_age this step
+    # ── BET maintenance grows linearly with age inside env ───
     env_b = FleetReplacementEnv()
     env_b.reset(seed=0)
-    bra = env_b.cfg.cost.battery_replacement_age
-    env_b.fleet_state[0] = [1.0, float(bra), annual_km_env * bra]
-    cost_with_repl, _ = 0.0, None
     from fleetreplacement_env.envs.costs import compute_step_cost as _csc
-    cost_item = _csc(
-        tech=1, age=float(bra), action=0,
-        annual_km=annual_km_env, cfg=env_b.cfg.cost, current_year=2026,
-    )
-    check(f"env: BET at battery_replacement_age={bra} → step cost includes battery_replacement",
-          cost_item.battery_replacement > 0,
-          f"got {cost_item.battery_replacement:.0f}")
+    cost_age1 = _csc(tech=1, age=1.0, action=0,
+                     annual_km=annual_km_env, cfg=env_b.cfg.cost, current_year=2026)
+    cost_age7 = _csc(tech=1, age=7.0, action=0,
+                     annual_km=annual_km_env, cfg=env_b.cfg.cost, current_year=2026)
+    check("env: BET maintenance at age=7 > age=1 (battery amortisation)",
+          cost_age7.maintenance > cost_age1.maintenance,
+          f"age=1: {cost_age1.maintenance:.0f}  age=7: {cost_age7.maintenance:.0f}")
 
     # ── ban_feature correctness ───────────────────────────
     env_ban = FleetReplacementEnv()
