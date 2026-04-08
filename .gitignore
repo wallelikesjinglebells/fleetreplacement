@@ -28,3 +28,6 @@ tumcolors_ase/
 
 # Environment on VM
 sa/
+
+# Salvage comparisons (sanity check)
+salvage_comparison/
