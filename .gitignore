@@ -25,3 +25,6 @@ comparison_figures/
 
 # ASE TUM colors
 tumcolors_ase/
+
+# Environment on VM
+sa/
