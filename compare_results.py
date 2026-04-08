@@ -281,6 +281,44 @@ def evaluate_rl(n_episodes=N_EPISODES):
 
 
 # ---------------------------------------------------------------------------
+# Plot
+# ---------------------------------------------------------------------------
+def plot_comparison(results: dict[str, np.ndarray]):
+    os.makedirs("comparison_figures/PNGs", exist_ok=True)
+    os.makedirs("comparison_figures/SVGs", exist_ok=True)
+
+    names  = list(results.keys())
+    colors = ["steelblue"] * len(names)
+    if "RL (PPO)" in names:
+        colors[names.index("RL (PPO)")] = "darkorange"
+
+    stem = f"comparison_{args.scenario}"
+
+    # --- Box plot ---
+    fig, ax = plt.subplots(figsize=(12, 5))
+    bp = ax.boxplot(
+        [-results[n] for n in names],
+        tick_labels=names,
+        patch_artist=True,
+        medianprops={"color": "black", "linewidth": 1.5},
+    )
+    for patch, color in zip(bp["boxes"], colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.7)
+    ax.set_ylabel("Costs (EUR)")
+    ax.set_title(f"Policy comparison — {SCENARIO_NAME}")
+    ax.tick_params(axis="x", rotation=30)
+    plt.tight_layout()
+    png_path = f"comparison_figures/PNGs/{stem}_box.png"
+    svg_path = f"comparison_figures/SVGs/{stem}_box.svg"
+    fig.savefig(png_path, dpi=150)
+    fig.savefig(svg_path)
+    print(f"Saved: {png_path}")
+    print(f"Saved: {svg_path}")
+    plt.show()
+
+
+# ---------------------------------------------------------------------------
 # All baselines to benchmark
 # ---------------------------------------------------------------------------
 BASELINES = [
@@ -359,43 +397,7 @@ if rl_rewards is not None:
           f"({'above' if delta >= 0 else 'below'} baseline)")
 print()
 
-# ---------------------------------------------------------------------------
-# Plots
-# ---------------------------------------------------------------------------
-
-os.makedirs("comparison_figures/PNGs", exist_ok=True)
-os.makedirs("comparison_figures/SVGs", exist_ok=True)
-
-names  = list(results.keys())
-colors = ["steelblue"] * len(names)
-if "RL (PPO)" in names:
-    colors[names.index("RL (PPO)")] = "darkorange"
-
-stem = f"comparison_{args.scenario}"
-
-# --- Box plot ---
-fig, ax = plt.subplots(figsize=(12, 5))
-bp = ax.boxplot(
-    [-results[n] for n in names],
-    labels=names,
-    patch_artist=True,
-    medianprops={"color": "black", "linewidth": 1.5},
-)
-for patch, color in zip(bp["boxes"], colors):
-    patch.set_facecolor(color)
-    patch.set_alpha(0.7)
-ax.set_ylabel("Costs (EUR)")
-ax.set_title(f"Policy comparison — {SCENARIO_NAME}")
-ax.tick_params(axis="x", rotation=30)
-plt.tight_layout()
-fig.savefig(f"comparison_figures/PNGs/{stem}_box.png", dpi=150)
-fig.savefig(f"comparison_figures/SVGs/{stem}_box.svg")
-plt.close(fig)
-
-print(f"Saved: {svg_path}")
-print(f"Saved: {png_path}")
-
-plt.show()
+plot_comparison(results)
 
 # ---------------------------------------------------------------------------
 # Optional: step-by-step trace for the best baseline and the RL model
