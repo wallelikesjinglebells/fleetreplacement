@@ -5,7 +5,6 @@ No training, no SB3.
 import sys, traceback
 sys.stdout.reconfigure(encoding="utf-8")
 import pandas as pd
-import ast
 import numpy as np
 
 PASS = "  [OK]"
@@ -30,7 +29,7 @@ section("LAYER 1 — CSV file integrity")
 COUNTRIES_COLS = [
     "name", "diesel_price", "energy_price", "construction_cost_contrib", "charger_price",
     "toll_dt", "toll_bet", "driver_wage", "tax",
-    "maint_km_DT", "maint_km_BET", "insurance_base", "subsidy_type", "subsidy_data",
+    "maint_km_DT", "maint_km_BET", "insurance_base", "subsidy_max",
 ]
 TRUCKS_COLS = [
     "name", "capex_base", "consumption", "bat_cap", "price_kwh_base",
@@ -39,7 +38,7 @@ TRUCKS_COLS = [
 SCENARIOS_COLS = [
     "name", "i_rate", "n_years", "bat_cap_factor", "price_kwh_factor",
     "efficiency_factor_dt", "efficiency_factor_bet", "max_lifetime_km", "max_vehicle_age",
-    "subsidy_fallback_perc", "subsidy_fallback_max",
+    "subsidy_perc", "subsidy_fallback_perc", "subsidy_fallback_max",
     "diesel_price_factor", "energy_price_factor",
     "toll_dt_factor", "toll_bet_multiplier", "toll_bet_share_dt", "tax_factor",
     "maint_manual_factor", "driver_wage_factor", "insurance_factor",
@@ -57,17 +56,6 @@ try:
     de_rows = df_c[df_c["name"] == "Germany"]
     check("Germany row exists", len(de_rows) == 1,
           f"found {len(de_rows)} rows")
-    if len(de_rows) == 1:
-        sub_raw = de_rows.iloc[0]["subsidy_data"]
-        try:
-            sub = ast.literal_eval(sub_raw)
-            check("subsidy_data parses as dict", isinstance(sub, dict),
-                  f"got {type(sub)}")
-            for k in ("percentage", "max_amount"):
-                check(f"  subsidy_data['{k}'] present", k in sub,
-                      f"keys found: {list(sub.keys())}")
-        except Exception as e:
-            check("subsidy_data ast.literal_eval", False, str(e))
 except Exception as e:
     check("countries.csv loads", False, str(e))
 

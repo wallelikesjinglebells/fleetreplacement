@@ -7,7 +7,6 @@ Defines MDPConfig (MDP hyperparameters), CostConfig (scenario cost tables), and 
 import pandas as pd
 from dataclasses import dataclass
 from pathlib import Path
-import ast
 
 # Based on Clara's TCO model (https://gitlab.lrz.de/global-drive-liu-tum/tco-modeling)
 
@@ -39,7 +38,6 @@ class CostConfig:
     maint_km_dt: float
     maint_km_bet: float
     insurance_base: float
-    subsidy_perc: float
     subsidy_max: float
 
     # --- trucks.csv ---
@@ -78,7 +76,8 @@ class CostConfig:
     # Lifetime cap (from scenario; can align with MDPConfig.max_mileage)
     max_lifetime_km: float
 
-    # Price scaling
+    # Subsidy
+    subsidy_perc: float
     subsidy_fallback_perc: float
     subsidy_fallback_max: float
     diesel_price_factor: float
@@ -133,7 +132,6 @@ def load_cost_config(
     # Load and filter COUNTRIES
     df_c = pd.read_csv(countries_path, sep=";", decimal=",")
     de   = df_c[df_c["name"] == "Germany"].iloc[0]
-    sub  = ast.literal_eval(de["subsidy_data"])                 # for evaluating subsidy_data in countries.csv
 
     # Load and filter TRUCKS (only looking at manual)
     df_t   = pd.read_csv(trucks_path, sep=";", decimal=",")
@@ -163,8 +161,7 @@ def load_cost_config(
         maint_km_dt = get_float(de, "maint_km_DT"),
         maint_km_bet = get_float(de, "maint_km_BET"),
         insurance_base = get_float(de, "insurance_base"),
-        subsidy_perc = get_float(sub, "percentage"),
-        subsidy_max = get_float(sub, "max_amount"),
+        subsidy_max = get_float(de, "subsidy_max"),
 
         # --- trucks.csv (DT) ---
         capex_dt = get_float(dt, "capex_base"),
@@ -191,6 +188,7 @@ def load_cost_config(
         efficiency_factor_bet = get_float(scen, "efficiency_factor_bet"),
         max_lifetime_km = get_float(scen, "max_lifetime_km"),
         max_vehicle_age = int(get_float(scen, "max_vehicle_age")),
+        subsidy_perc = get_float(scen, "subsidy_perc"),
         subsidy_fallback_perc = get_float(scen, "subsidy_fallback_perc"),
         subsidy_fallback_max = get_float(scen, "subsidy_fallback_max"),
         diesel_price_factor = get_float(scen, "diesel_price_factor"),

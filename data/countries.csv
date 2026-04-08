@@ -1,2 +1,2 @@
-name;diesel_price;energy_price;construction_cost_contrib;charger_price;toll_dt;toll_bet;driver_wage;tax;maint_km_DT;maint_km_BET;insurance_base;subsidy_type;subsidy_data
-Germany;1,66;0,399;37760;70876;0,348;0;27;929;0,185;0,1324;3050;percentage_of_diff;{'percentage': 0.6, 'max_amount': 300000}
+name;diesel_price;energy_price;construction_cost_contrib;charger_price;toll_dt;toll_bet;driver_wage;tax;maint_km_DT;maint_km_BET;insurance_base;subsidy_max
+Germany;1,66;0,399;37760;70876;0,348;0;27;929;0,185;0,1324;3050;300000
