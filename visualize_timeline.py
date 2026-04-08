@@ -21,6 +21,7 @@ import scienceplots
 plt.style.use(["science", "nature", "grid"])
 plt.rcParams["text.usetex"] = False
 plt.rcParams["font.family"] = "Arial"
+from tum_colors import cmap_blue, cmap_orange
 import gymnasium as gym
 import fleetreplacement_env
 from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config
@@ -133,8 +134,8 @@ def plot_heatmaps(tensor: np.ndarray, start_year: int):
     )
 
     panels = [
-        (axes[0], bet_prob, "BET replacement probability", "Blues"),
-        (axes[1], dt_prob,  "DT replacement probability",  "Oranges"),
+        (axes[0], bet_prob, "BET replacement probability", cmap_blue),
+        (axes[1], dt_prob,  "DT replacement probability",  cmap_orange),
     ]
     for ax, data, title, cmap in panels:
         im = ax.imshow(data, aspect="auto", vmin=0, vmax=1, cmap=cmap, origin="upper")

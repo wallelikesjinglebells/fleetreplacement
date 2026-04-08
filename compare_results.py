@@ -18,6 +18,7 @@ import scienceplots
 plt.style.use(["science", "nature", "grid"])
 plt.rcParams["text.usetex"] = False
 plt.rcParams["font.family"] = "Arial"
+from tum_colors import TUM_BLUE, TUM_ORANGE
 import gymnasium as gym
 import fleetreplacement_env
 from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config
@@ -288,9 +289,9 @@ def plot_comparison(results: dict[str, np.ndarray]):
     os.makedirs("comparison_figures/SVGs", exist_ok=True)
 
     names  = list(results.keys())
-    colors = ["steelblue"] * len(names)
+    colors = [TUM_BLUE] * len(names)
     if "RL (PPO)" in names:
-        colors[names.index("RL (PPO)")] = "darkorange"
+        colors[names.index("RL (PPO)")] = TUM_ORANGE
 
     stem = f"comparison_{args.scenario}"
 

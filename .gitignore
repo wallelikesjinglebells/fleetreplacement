@@ -22,3 +22,6 @@ heatmaps/
 
 # Comparison figures
 comparison_figures/
+
+# ASE TUM colors
+tumcolors_ase/
