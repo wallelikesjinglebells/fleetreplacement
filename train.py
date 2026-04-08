@@ -35,7 +35,7 @@ args = parser.parse_args()
 # Configuration variables, tunable settings
 SCENARIO_NAME = _SCENARIO_MAP[args.scenario]
 ENV_ID        = "FleetReplacement-v0"
-TOTAL_STEPS   = 3_000_000             # total number of environment steps to train
+TOTAL_STEPS   = 5_000_000             # total number of environment steps to train
 N_ENVS        = 4                     # parallel environments for faster data collection
 EVAL_FREQ     = 10_000                # pause training every EVAL_FREQ steps to evaluate current policy on eval_env
 _scenario_tag = args.scenario
@@ -82,7 +82,7 @@ model = MaskablePPO(
     n_epochs=10,
     gamma=1.0,              # env already applies economic discounting in reward, no additional discounting needed
     tensorboard_log=LOG_DIR,
-    ent_coef=0.01,          # entropy coefficient for loss calculation (PPO is rewarded for exploring all actions)
+    ent_coef=0.05,          # entropy coefficient for loss calculation (PPO is rewarded for exploring all actions)
     policy_kwargs=dict(net_arch=[256, 256]),  # larger network than default [64, 64] for 23-dim obs and 3^10 action space
 )
 
