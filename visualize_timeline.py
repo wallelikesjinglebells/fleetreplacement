@@ -142,8 +142,9 @@ def plot_heatmaps(tensor: np.ndarray, start_year: int):
         ax.set_title(title)
         ax.set_xlabel("Year")
         ax.set_ylabel("Vehicle rank at episode start")
-        ax.set_xticks(range(n_steps))
-        ax.set_xticklabels(year_labels, rotation=45, ha="right", fontsize=8)
+        even_year_ticks = [t for t in range(n_steps) if (start_year + t) % 2 == 0]
+        ax.set_xticks(even_year_ticks)
+        ax.set_xticklabels([year_labels[t] for t in even_year_ticks], rotation=45, ha="right", fontsize=8)
         ax.set_yticks(range(n_vehicles))
         ax.set_yticklabels(vehicle_labels, fontsize=8)
         plt.colorbar(im, ax=ax, label="Fraction of episodes")
