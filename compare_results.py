@@ -14,6 +14,7 @@ import argparse
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter, MultipleLocator
 import scienceplots
 plt.style.use(["science", "nature", "grid"])
 plt.rcParams["text.usetex"] = False
@@ -295,21 +296,62 @@ def plot_comparison(results: dict[str, np.ndarray]):
 
     stem = f"comparison_{args.scenario}"
 
-    # --- Box plot ---
-    fig, ax = plt.subplots(figsize=(12, 5))
-    bp = ax.boxplot(
-        [-results[n] for n in names],
-        tick_labels=names,
-        patch_artist=True,
-        medianprops={"color": "black", "linewidth": 1.5},
+    # --- Box plot (broken y-axis: data panel + zero anchor) ---
+    all_vals = np.concatenate([-results[n] for n in names])
+    data_min, data_max = all_vals.min(), all_vals.max()
+    span = data_max - data_min
+
+    fig, (ax_top, ax_bot) = plt.subplots(
+        2, 1, sharex=True, figsize=(12, 6),
+        gridspec_kw={"height_ratios": [4, 1]},
     )
-    for patch, color in zip(bp["boxes"], colors):
-        patch.set_facecolor(color)
-        patch.set_alpha(0.7)
-    ax.set_ylabel("Costs (EUR)")
-    ax.set_title(f"Policy comparison — {SCENARIO_NAME}")
-    ax.tick_params(axis="x", rotation=30)
-    plt.tight_layout()
+    fig.subplots_adjust(left=0.08, right=0.97, top=0.92, bottom=0.18, hspace=0.04)
+
+    def _draw_bp(ax):
+        bp = ax.boxplot(
+            [-results[n] for n in names],
+            tick_labels=names,
+            patch_artist=True,
+            medianprops={"color": "black", "linewidth": 1.5},
+        )
+        for patch, color in zip(bp["boxes"], colors):
+            patch.set_facecolor(color)
+            patch.set_edgecolor("black")
+
+    _draw_bp(ax_top)
+    _draw_bp(ax_bot)
+
+    # Shared tick interval (same granularity above and below the break)
+    raw_step = span / 5
+    magnitude = 10 ** np.floor(np.log10(raw_step))
+    tick_step = round(raw_step / magnitude) * magnitude
+
+    ax_top.set_ylim(data_min - span * 0.05, data_max + span * 0.1)
+    ax_bot.set_ylim(0, data_min * 0.12)
+
+    millions = FuncFormatter(lambda x, _: f"{x / 1e6:.1f}")
+    for ax in (ax_top, ax_bot):
+        ax.yaxis.set_major_locator(MultipleLocator(tick_step))
+        ax.yaxis.set_major_formatter(millions)
+        ax.yaxis.get_offset_text().set_visible(False)
+
+    # Hide the touching spines to create the visual break
+    ax_top.spines["bottom"].set_visible(False)
+    ax_bot.spines["top"].set_visible(False)
+    ax_top.xaxis.tick_top()
+    ax_top.tick_params(labeltop=False)
+    ax_bot.xaxis.tick_bottom()
+
+    # Slanted break markers (marker-based, style-independent)
+    d = 0.5
+    kwargs = dict(marker=[(-1, -d), (1, d)], markersize=12,
+                  linestyle="none", color="k", mec="k", mew=1, clip_on=False)
+    ax_top.plot([0, 1], [0, 0], transform=ax_top.transAxes, **kwargs)
+    ax_bot.plot([0, 1], [1, 1], transform=ax_bot.transAxes, **kwargs)
+
+    ax_top.set_ylabel("Costs (EUR millions)")
+    ax_top.set_title(f"Policy comparison — {SCENARIO_NAME}")
+    ax_bot.tick_params(axis="x", rotation=30)
     png_path = f"comparison_figures/PNGs/{stem}_box.png"
     svg_path = f"comparison_figures/SVGs/{stem}_box.svg"
     fig.savefig(png_path, dpi=150)
