@@ -5,9 +5,10 @@ Runs several "manual" policies and the trained MaskablePPO model on the same
 environment so that all results are directly comparable.
 
 Usage:
-    python evaluate_heuristics.py SQ          # Status Quo (default)
-    python evaluate_heuristics.py S1          # Scenario 1, etc.
-    python evaluate_heuristics.py SQ --trace  # also print step-by-step for best baseline + RL
+    python compare_results.py SQ          # Status Quo (default)
+    python compare_results.py S1          # Scenario 1, etc.
+    python compare_results.py SQ --trace  # also print step-by-step for best baseline + RL
+    python compare_results.py S1 --modal  # load model from modal_outputs/
 """
 
 import argparse
@@ -47,12 +48,18 @@ parser.add_argument("--seed", type=int, default=42,
                     help="Base random seed (default: 42)")
 parser.add_argument("--trace", action="store_true",
                     help="Print step-by-step output for the best baseline and the RL model")
+parser.add_argument("--modal", action="store_true",
+                    help="Load model from modal_outputs/ instead of models/")
 args = parser.parse_args()
 
 SCENARIO_NAME  = _SCENARIO_MAP[args.scenario]
 N_EPISODES     = args.episodes
 BASE_SEED      = args.seed
-MODEL_PATH     = f"./models/scenarios/ppo_fleet_{args.scenario}/best_model"
+_scenario_tag  = args.scenario
+if args.modal:
+    MODEL_PATH = f"./modal_outputs/models/scenarios/ppo_fleet_{_scenario_tag}/best_model"
+else:
+    MODEL_PATH = f"./models/scenarios/ppo_fleet_{_scenario_tag}/best_model"
 
 # ---------------------------------------------------------------------------
 # Environment factories

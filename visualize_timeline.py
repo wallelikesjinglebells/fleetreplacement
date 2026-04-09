@@ -11,6 +11,7 @@ Usage:
     python visualize_timeline.py S1
     python visualize_timeline.py S1 --episodes 100
     python visualize_timeline.py S1 --episodes 100 --seed 0
+    python visualize_timeline.py S1 --modal
 """
 
 import argparse
@@ -46,12 +47,18 @@ parser.add_argument("--episodes", type=int, default=50,
                     help="Number of episodes to collect (default: 50)")
 parser.add_argument("--seed", type=int, default=42,
                     help="Base random seed (default: 42)")
+parser.add_argument("--modal", action="store_true",
+                    help="Load model from modal_outputs/ instead of models/")
 args = parser.parse_args()
 
 SCENARIO_NAME = _SCENARIO_MAP[args.scenario]
 N_EPISODES    = args.episodes
 BASE_SEED     = args.seed
-MODEL_PATH    = f"./models/scenarios/ppo_fleet_{args.scenario}/best_model"
+_scenario_tag = args.scenario
+if args.modal:
+    MODEL_PATH = f"./modal_outputs/models/scenarios/ppo_fleet_{_scenario_tag}/best_model"
+else:
+    MODEL_PATH = f"./models/scenarios/ppo_fleet_{_scenario_tag}/best_model"
 
 # ---------------------------------------------------------------------------
 # Environment factory
