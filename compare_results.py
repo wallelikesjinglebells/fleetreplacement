@@ -29,6 +29,8 @@ from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cos
 os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
+CUTOFF_YEAR = 2046   # evaluate costs only up to (exclusive) this year to mitigate EOH effects
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -240,25 +242,35 @@ def policy_greedy_bet(env) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # Episode runner (baselines)
 # ---------------------------------------------------------------------------
-def run_episode(policy_fn, env, seed=None, policy_kwargs=None) -> float:
-    """Run one episode and return total (undiscounted by RL, discounted internally) reward."""
+def run_episode(policy_fn, env, seed=None, policy_kwargs=None, eval_steps=None) -> float:
+    """Run one episode and return total (undiscounted by RL, discounted internally) reward.
+
+    If eval_steps is set, only accumulate reward for the first eval_steps steps
+    (the episode still runs to completion so policy decisions are unaffected).
+    """
     obs, _ = env.reset(seed=seed)
     env.unwrapped._stagger_schedule = None   # clear staggered schedule for new episode
     done = False
     total_reward = 0.0
+    step = 0
     kwargs = policy_kwargs or {}
     while not done:
         action = policy_fn(env, **kwargs)
         obs, reward, terminated, truncated, _ = env.step(action)
-        total_reward += reward
+        step += 1
+        if eval_steps is None or step <= eval_steps:
+            total_reward += reward
         done = terminated or truncated
     return total_reward
 
 
 def evaluate_policy(policy_fn, policy_kwargs=None, n_episodes=N_EPISODES) -> np.ndarray:
     env = make_env()
+    cfg = env.unwrapped.cfg.mdp
+    eval_steps = min(cfg.planning_horizon, CUTOFF_YEAR - cfg.start_year)
     rewards = np.array([
-        run_episode(policy_fn, env, seed=BASE_SEED + ep, policy_kwargs=policy_kwargs)
+        run_episode(policy_fn, env, seed=BASE_SEED + ep, policy_kwargs=policy_kwargs,
+                    eval_steps=eval_steps)
         for ep in range(n_episodes)
     ])
     env.close()
@@ -269,20 +281,29 @@ def evaluate_policy(policy_fn, policy_kwargs=None, n_episodes=N_EPISODES) -> np.
 # RL evaluation
 # ---------------------------------------------------------------------------
 def evaluate_rl(n_episodes=N_EPISODES):
-    """Load the best saved MaskablePPO model and evaluate it."""
+    """Load the best saved MaskablePPO model and evaluate it.
+
+    The full 30-year trained policy is executed, but only the first
+    eval_steps years of costs are accumulated (to mitigate EOH effects).
+    """
     from sb3_contrib import MaskablePPO
 
     model = MaskablePPO.load(MODEL_PATH)
     env = make_env_masked()
+    cfg = env.unwrapped.cfg.mdp
+    eval_steps = min(cfg.planning_horizon, CUTOFF_YEAR - cfg.start_year)
     rewards = []
     for ep in range(n_episodes):
         obs, _ = env.reset(seed=BASE_SEED + ep)
         done = False
         total_reward = 0.0
+        step = 0
         while not done:
             action, _ = model.predict(obs, deterministic=True, action_masks=env.action_masks())
             obs, reward, terminated, truncated, _ = env.step(action)
-            total_reward += reward
+            step += 1
+            if step <= eval_steps:
+                total_reward += reward
             done = terminated or truncated
         rewards.append(total_reward)
     env.close()

@@ -30,6 +30,8 @@ from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cos
 os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
+CUTOFF_YEAR = 2046   # visualize up to (exclusive) this year to mitigate EOH effects
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -123,6 +125,11 @@ def collect_action_tensor() -> tuple[np.ndarray, int]:
 def plot_heatmaps(tensor: np.ndarray, start_year: int):
     n_vehicles = tensor.shape[1]
     n_steps    = tensor.shape[2]
+
+    # Truncate to CUTOFF_YEAR to mitigate end-of-horizon effects
+    n_eval  = min(n_steps, CUTOFF_YEAR - start_year)
+    tensor  = tensor[:, :, :n_eval]
+    n_steps = n_eval
 
     bet_prob = np.mean(tensor == 2, axis=0)   # (n_vehicles, n_steps)
     dt_prob  = np.mean(tensor == 1, axis=0)
