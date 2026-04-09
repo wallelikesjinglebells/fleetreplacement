@@ -48,6 +48,8 @@ parser.add_argument("--episodes", type=int, default=50,
                     help="Number of episodes to collect (default: 50)")
 parser.add_argument("--seed", type=int, default=42,
                     help="Base random seed (default: 42)")
+parser.add_argument("--final", action="store_true",
+                    help="Use the final model (ppo_fleet_SX_final.zip) instead of best_model")
 args, _extra = parser.parse_known_args()
 
 # Detect --vN flag dynamically (e.g. --v0, --v1, --v2, ...)
@@ -62,7 +64,11 @@ SCENARIO_NAME = _SCENARIO_MAP[args.scenario]
 N_EPISODES    = args.episodes
 BASE_SEED     = args.seed
 _scenario_tag = args.scenario
-MODEL_PATH = f"./models/{_version}/ppo_fleet_{_scenario_tag}/best_model"
+_model_suffix = "_final" if args.final else ""
+if args.final:
+    MODEL_PATH = f"./models/{_version}/ppo_fleet_{_scenario_tag}_final"
+else:
+    MODEL_PATH = f"./models/{_version}/ppo_fleet_{_scenario_tag}/best_model"
 
 # ---------------------------------------------------------------------------
 # Environment factory
@@ -169,8 +175,8 @@ def plot_heatmaps(tensor: np.ndarray, start_year: int):
     plt.tight_layout()
     os.makedirs(f"heatmaps/{_version}/SVG", exist_ok=True)
     os.makedirs(f"heatmaps/{_version}/PNG", exist_ok=True)
-    svg_path = f"heatmaps/{_version}/SVG/timeline_heatmap_{_scenario_tag}.svg"
-    png_path = f"heatmaps/{_version}/PNG/timeline_heatmap_{_scenario_tag}.png"
+    svg_path = f"heatmaps/{_version}/SVG/timeline_heatmap_{_scenario_tag}{_model_suffix}.svg"
+    png_path = f"heatmaps/{_version}/PNG/timeline_heatmap_{_scenario_tag}{_model_suffix}.png"
     plt.savefig(svg_path, bbox_inches="tight")
     plt.savefig(png_path, dpi=150, bbox_inches="tight")
     print(f"Saved: {svg_path}")

@@ -5,14 +5,15 @@ Runs several "manual" policies and the trained MaskablePPO model on the same
 environment so that all results are directly comparable.
 
 Usage:
-    python compare_results.py SQ          # Status Quo (default)
-    python compare_results.py S1          # Scenario 1, etc.
-    python compare_results.py SQ --trace  # also print step-by-step for best baseline + RL
-    python compare_results.py S1 --modal  # load model from modal_outputs/
+    python compare_results.py SQ --v0
+    python compare_results.py S1 --v1
+    python compare_results.py SQ --v2 --trace
+    python compare_results.py S1 --v2 --final
 """
 
 import argparse
 import os
+import re as _re
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, MultipleLocator
@@ -50,18 +51,27 @@ parser.add_argument("--seed", type=int, default=42,
                     help="Base random seed (default: 42)")
 parser.add_argument("--trace", action="store_true",
                     help="Print step-by-step output for the best baseline and the RL model")
-parser.add_argument("--modal", action="store_true",
-                    help="Load model from modal_outputs/ instead of models/")
-args = parser.parse_args()
+parser.add_argument("--final", action="store_true",
+                    help="Use the final model (ppo_fleet_SX_final.zip) instead of best_model")
+args, _extra = parser.parse_known_args()
+
+# Detect --vN flag dynamically (e.g. --v0, --v1, --v2, ...)
+_version_flags = [a for a in _extra if _re.fullmatch(r"--v\d+", a)]
+if len(_version_flags) == 0:
+    parser.error("A version flag is required (e.g. --v0, --v1, --v2, ...)")
+if len(_version_flags) > 1:
+    parser.error(f"Only one version flag allowed, got: {' '.join(_version_flags)}")
+_version = _version_flags[0].lstrip("-")   # "v0", "v1", ...
 
 SCENARIO_NAME  = _SCENARIO_MAP[args.scenario]
 N_EPISODES     = args.episodes
 BASE_SEED      = args.seed
 _scenario_tag  = args.scenario
-if args.modal:
-    MODEL_PATH = f"./modal_outputs/models/scenarios/ppo_fleet_{_scenario_tag}/best_model"
+_model_suffix  = "_final" if args.final else ""
+if args.final:
+    MODEL_PATH = f"./models/{_version}/ppo_fleet_{_scenario_tag}_final"
 else:
-    MODEL_PATH = f"./models/scenarios/ppo_fleet_{_scenario_tag}/best_model"
+    MODEL_PATH = f"./models/{_version}/ppo_fleet_{_scenario_tag}/best_model"
 
 # ---------------------------------------------------------------------------
 # Environment factories
@@ -314,18 +324,11 @@ def evaluate_rl(n_episodes=N_EPISODES):
 # Plot
 # ---------------------------------------------------------------------------
 def plot_comparison(results: dict[str, np.ndarray]):
-    if args.modal:
-        os.makedirs("comparison_figures/modal/PNGs", exist_ok=True)
-        os.makedirs("comparison_figures/modal/SVGs", exist_ok=True)
-        stem = f"comparison_modal_{args.scenario}"
-        png_dir = "comparison_figures/modal/PNGs"
-        svg_dir = "comparison_figures/modal/SVGs"
-    else:
-        os.makedirs("comparison_figures/PNGs", exist_ok=True)
-        os.makedirs("comparison_figures/SVGs", exist_ok=True)
-        stem = f"comparison_{args.scenario}"
-        png_dir = "comparison_figures/PNGs"
-        svg_dir = "comparison_figures/SVGs"
+    os.makedirs(f"comparison_figures/{_version}/PNG", exist_ok=True)
+    os.makedirs(f"comparison_figures/{_version}/SVG", exist_ok=True)
+    stem    = f"comparison_{_scenario_tag}{_model_suffix}"
+    png_dir = f"comparison_figures/{_version}/PNG"
+    svg_dir = f"comparison_figures/{_version}/SVG"
 
     names  = list(results.keys())
     colors = [TUM_BLUE] * len(names)
