@@ -135,7 +135,7 @@ def train_scenario(scenario: str):
 @app.function(
     image=image,
     volumes={VOLUME_PATH: volume},
-    allow_concurrent_inputs=1,
+    single_use_containers=True,
 )
 @modal.web_server(6006, startup_timeout=60)
 def tensorboard():
