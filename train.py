@@ -10,8 +10,6 @@ Usage:
 """
 
 import argparse
-import os
-import re
 import fleetreplacement_env  # triggers register() in __init__.py, is important for gym.make() although flagged as not accessed
 import gymnasium as gym
 from sb3_contrib import MaskablePPO
@@ -44,21 +42,7 @@ _ENTROPY_COEF = {
 }
 parser = argparse.ArgumentParser()
 parser.add_argument("scenario", choices=_SCENARIO_MAP, help="Scenario key: SQ, S1, S2, S3, S4")
-parser.add_argument("--writetooold", action="store_true",
-                    help="Write into the latest existing version folder (e.g. v1) instead of creating a new one (e.g. v2)")
 args = parser.parse_args()
-
-# Detect next (or current) version by scanning logs/ and models/ for v<N> folders
-def _detect_version(logs_root, models_root, write_to_old):
-    existing = set()
-    for root in (logs_root, models_root):
-        if os.path.isdir(root):
-            for name in os.listdir(root):
-                if re.fullmatch(r"v\d+", name):
-                    existing.add(int(name[1:]))
-    if not existing:
-        return 0
-    return max(existing) if write_to_old else max(existing) + 1
 
 # Configuration variables, tunable settings
 SCENARIO_NAME = _SCENARIO_MAP[args.scenario]
@@ -67,10 +51,8 @@ TOTAL_STEPS   = 5_000_000             # total number of environment steps to tra
 N_ENVS        = 4                     # parallel environments for faster data collection
 EVAL_FREQ     = 10_000                # pause training every EVAL_FREQ steps to evaluate current policy on eval_env
 _scenario_tag = args.scenario
-_version      = _detect_version("./logs", "./models", args.writetooold)
-LOG_DIR       = f"./logs/v{_version}/{_scenario_tag}/"
-SAVE_PATH     = f"./models/v{_version}/ppo_fleet_{_scenario_tag}"
-print(f"[train] Using version v{_version} ({'overwriting' if args.writetooold else 'new'}): logs → {LOG_DIR}, models → {SAVE_PATH}")
+LOG_DIR       = f"./logs/scenarios/{_scenario_tag}/"
+SAVE_PATH     = f"./models/scenarios/ppo_fleet_{_scenario_tag}"
 
 # Wrap env with ActionMasker, loading the correct scenario config
 def make_masked_env():

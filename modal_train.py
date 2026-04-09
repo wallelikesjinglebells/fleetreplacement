@@ -73,7 +73,7 @@ ENTROPY_COEF = {
     volumes={VOLUME_PATH: volume},
     retries=3,
 )
-def train_scenario(scenario: str, writetooold: bool = False):
+def train_scenario(scenario: str):
     """Train MaskablePPO for a single scenario inside a Modal container."""
     import os
     import gymnasium as gym
@@ -91,32 +91,17 @@ def train_scenario(scenario: str, writetooold: bool = False):
 
     os.chdir("/root")  # makes data/ relative paths in load_cost_config() work
 
-    # Detect version from volume contents (reload first to get latest state)
-    volume.reload()
-    def _detect_version(logs_root, models_root, write_to_old):
-        existing = set()
-        for root in (logs_root, models_root):
-            if os.path.isdir(root):
-                for name in os.listdir(root):
-                    if re.fullmatch(r"v\d+", name):
-                        existing.add(int(name[1:]))
-        if not existing:
-            return 0
-        return max(existing) if write_to_old else max(existing) + 1
-
     SCENARIO_NAME  = SCENARIO_MAP[scenario]
     ENV_ID         = "FleetReplacement-v0"
     TOTAL_STEPS    = 5_000_000
     N_ENVS         = 16
     EVAL_FREQ      = 10_000
-    _version       = _detect_version(f"{VOLUME_PATH}/logs", f"{VOLUME_PATH}/models", writetooold)
-    LOG_DIR        = f"{VOLUME_PATH}/logs/v{_version}/{scenario}/"
-    SAVE_PATH      = f"{VOLUME_PATH}/models/v{_version}/ppo_fleet_{scenario}"
+    LOG_DIR        = f"{VOLUME_PATH}/logs/scenarios/{scenario}/"
+    SAVE_PATH      = f"{VOLUME_PATH}/models/scenarios/ppo_fleet_{scenario}"
     CHECKPOINT_DIR = f"{SAVE_PATH}_checkpoints"
-    print(f"[{scenario}] Using version v{_version} ({'overwriting' if writetooold else 'new'}): logs → {LOG_DIR}")
 
     os.makedirs(LOG_DIR, exist_ok=True)
-    os.makedirs(f"{VOLUME_PATH}/models/v{_version}", exist_ok=True)
+    os.makedirs(f"{VOLUME_PATH}/models/scenarios", exist_ok=True)
 
     def make_masked_env():
         cfg = FleetEnvConfig(mdp=MDPConfig(), cost=load_cost_config(scenario_name=SCENARIO_NAME))
@@ -151,6 +136,7 @@ def train_scenario(scenario: str, writetooold: bool = False):
     # --- Resume from checkpoint if one exists ---
     resumed_steps = 0
     if os.path.isdir(CHECKPOINT_DIR):
+        volume.reload()  # ensure volume contents are up to date
         ckpt_files = [f for f in os.listdir(CHECKPOINT_DIR) if re.fullmatch(r"model_\d+_steps\.zip", f)]
         if ckpt_files:
             latest = max(ckpt_files, key=lambda f: int(re.search(r"(\d+)_steps", f).group(1)))
@@ -223,16 +209,15 @@ def tensorboard():
 
 
 @app.local_entrypoint()
-def main(scenario: str = "SQ", writetooold: bool = False):
+def main(scenario: str = "SQ"):
     """
     CLI entrypoint. Pass --scenario <key> or --scenario all.
-    Pass --writetooold to write into the latest existing version instead of creating a new one.
     """
     if scenario == "all":
         # Spawn all 5 scenarios as separate containers in parallel
-        for result in train_scenario.map(list(SCENARIO_MAP.keys()), kwargs={"writetooold": writetooold}):
+        for result in train_scenario.map(list(SCENARIO_MAP.keys())):
             pass  # .map() is lazy; iterating waits for all to finish
     elif scenario in SCENARIO_MAP:
-        train_scenario.remote(scenario, writetooold)
+        train_scenario.remote(scenario)
     else:
         raise ValueError(f"Unknown scenario '{scenario}'. Choose from: {list(SCENARIO_MAP.keys())} or 'all'")
