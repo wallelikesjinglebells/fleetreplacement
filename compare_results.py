@@ -293,15 +293,23 @@ def evaluate_rl(n_episodes=N_EPISODES):
 # Plot
 # ---------------------------------------------------------------------------
 def plot_comparison(results: dict[str, np.ndarray]):
-    os.makedirs("comparison_figures/PNGs", exist_ok=True)
-    os.makedirs("comparison_figures/SVGs", exist_ok=True)
+    if args.modal:
+        os.makedirs("comparison_figures/modal/PNGs", exist_ok=True)
+        os.makedirs("comparison_figures/modal/SVGs", exist_ok=True)
+        stem = f"comparison_modal_{args.scenario}"
+        png_dir = "comparison_figures/modal/PNGs"
+        svg_dir = "comparison_figures/modal/SVGs"
+    else:
+        os.makedirs("comparison_figures/PNGs", exist_ok=True)
+        os.makedirs("comparison_figures/SVGs", exist_ok=True)
+        stem = f"comparison_{args.scenario}"
+        png_dir = "comparison_figures/PNGs"
+        svg_dir = "comparison_figures/SVGs"
 
     names  = list(results.keys())
     colors = [TUM_BLUE] * len(names)
     if "RL (PPO)" in names:
         colors[names.index("RL (PPO)")] = TUM_ORANGE
-
-    stem = f"comparison_{args.scenario}"
 
     # --- Box plot (broken y-axis: data panel + zero anchor) ---
     all_vals = np.concatenate([-results[n] for n in names])
@@ -363,8 +371,8 @@ def plot_comparison(results: dict[str, np.ndarray]):
     ax_top.set_ylabel("Costs (EUR millions)")
     ax_top.set_title(f"Policy comparison — {SCENARIO_NAME}")
     ax_bot.tick_params(axis="x", rotation=30)
-    png_path = f"comparison_figures/PNGs/{stem}_box.png"
-    svg_path = f"comparison_figures/SVGs/{stem}_box.svg"
+    png_path = f"{png_dir}/{stem}_box.png"
+    svg_path = f"{svg_dir}/{stem}_box.svg"
     fig.savefig(png_path, dpi=150)
     fig.savefig(svg_path)
     print(f"Saved: {png_path}")

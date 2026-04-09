@@ -158,10 +158,16 @@ def plot_heatmaps(tensor: np.ndarray, start_year: int):
         plt.colorbar(im, ax=ax, label="Fraction of episodes")
 
     plt.tight_layout()
-    os.makedirs("heatmaps/SVGs", exist_ok=True)
-    os.makedirs("heatmaps/PNGs", exist_ok=True)
-    svg_path = f"heatmaps/SVGs/timeline_heatmap_{args.scenario}.svg"
-    png_path = f"heatmaps/PNGs/timeline_heatmap_{args.scenario}.png"
+    if args.modal:
+        os.makedirs("heatmaps/modal/SVGs", exist_ok=True)
+        os.makedirs("heatmaps/modal/PNGs", exist_ok=True)
+        svg_path = f"heatmaps/modal/SVGs/timeline_heatmap_modal_{args.scenario}.svg"
+        png_path = f"heatmaps/modal/PNGs/timeline_heatmap_modal_{args.scenario}.png"
+    else:
+        os.makedirs("heatmaps/SVGs", exist_ok=True)
+        os.makedirs("heatmaps/PNGs", exist_ok=True)
+        svg_path = f"heatmaps/SVGs/timeline_heatmap_{args.scenario}.svg"
+        png_path = f"heatmaps/PNGs/timeline_heatmap_{args.scenario}.png"
     plt.savefig(svg_path, bbox_inches="tight")
     plt.savefig(png_path, dpi=150, bbox_inches="tight")
     print(f"Saved: {svg_path}")
