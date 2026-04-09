@@ -57,6 +57,7 @@ SCENARIO_MAP = {
 @app.function(
     image=image,
     cpu=16.0,
+    memory=32768,
     timeout=4 * 3600,  # 4 hours per scenario
     volumes={VOLUME_PATH: volume},
 )
