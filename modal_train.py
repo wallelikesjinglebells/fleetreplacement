@@ -4,7 +4,7 @@ Modal.com training script for fleet replacement MaskablePPO.
 Usage:
     modal run modal_train.py                    # train Status Quo (default)
     modal run modal_train.py --scenario S1      # train a specific scenario
-    modal run modal_train.py --scenario all     # train all 5 scenarios in parallel
+    modal run --detach modal_train.py --scenario all     # train all 5 scenarios in parallel, detach: don't stop the app if local process dies or disconnects
 
 Prerequisites:
     pip install modal
