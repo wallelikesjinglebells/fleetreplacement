@@ -53,6 +53,17 @@ SCENARIO_MAP = {
     "S4": "Scenario 4: Autonomous Green Logistics",
 }
 
+# S1 has no BET adoption (break-even > 80 yrs); its only learnable signal is DT lifecycle
+# timing — a narrow decision space that converges cleanly with low entropy.
+# S2/S3/S4 need higher entropy to explore the BET timing / subsidy expiry trade-offs.
+ENTROPY_COEF = {
+    "SQ": 0.05,
+    "S1": 0.01,
+    "S2": 0.05,
+    "S3": 0.05,
+    "S4": 0.05,
+}
+
 
 @app.function(
     image=image,
@@ -167,9 +178,13 @@ def train_scenario(scenario: str, writetooold: bool = False):
             n_epochs=10,
             gamma=1.0,
             tensorboard_log=LOG_DIR,
-            ent_coef=0.05,
+            ent_coef=ENTROPY_COEF[scenario],
             policy_kwargs=dict(net_arch=[256, 256]),
         )
+    else:
+        # Override whatever ent_coef was baked into the checkpoint
+        model.ent_coef = ENTROPY_COEF[scenario]
+        print(f"[{scenario}] ent_coef overridden to {ENTROPY_COEF[scenario]}")
 
     remaining_steps = TOTAL_STEPS - resumed_steps
     print(f"[{scenario}] Training for {remaining_steps:,} steps (resumed from {resumed_steps:,})")

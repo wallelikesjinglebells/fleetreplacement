@@ -31,6 +31,17 @@ _SCENARIO_MAP = {
     "S3": "Scenario 3: Ambition meets Reality",
     "S4": "Scenario 4: Autonomous Green Logistics",
 }
+
+# S1 has no BET adoption (break-even > 80 yrs); its only learnable signal is DT lifecycle
+# timing — a narrow decision space that converges cleanly with low entropy.
+# S2/S3/S4 need higher entropy to explore the BET timing / subsidy expiry trade-offs.
+_ENTROPY_COEF = {
+    "SQ": 0.05,
+    "S1": 0.01,
+    "S2": 0.05,
+    "S3": 0.05,
+    "S4": 0.05,
+}
 parser = argparse.ArgumentParser()
 parser.add_argument("scenario", choices=_SCENARIO_MAP, help="Scenario key: SQ, S1, S2, S3, S4")
 parser.add_argument("--writetooold", action="store_true",
@@ -101,7 +112,7 @@ model = MaskablePPO(
     n_epochs=10,
     gamma=1.0,              # env already applies economic discounting in reward, no additional discounting needed
     tensorboard_log=LOG_DIR,
-    ent_coef=0.05,          # entropy coefficient for loss calculation (PPO is rewarded for exploring all actions)
+    ent_coef=_ENTROPY_COEF[_scenario_tag],  # entropy coefficient for loss calculation (PPO is rewarded for exploring all actions)
     policy_kwargs=dict(net_arch=[256, 256]),  # larger network than default [64, 64] for 23-dim obs and 3^10 action space
 )
 
