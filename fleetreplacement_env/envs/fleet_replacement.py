@@ -71,9 +71,12 @@ class FleetReplacementEnv(gym.Env):
         # Steps to DT ban
         steps_to_ban = max(0, self.dt_ban_step - self.current_step)
         ban_feature = np.array([min(1.0, steps_to_ban / self.cfg.mdp.planning_horizon)], dtype=np.float32)                                      # normalize; 1.0 if ban is beyond horizon (S1/S2), decreases to 0 as ban approaches
-        # Steps until subsidy expiry
-        steps_to_expiry = max(0, self.subsidy_expiry_step - self.current_step)
-        subsidy_feature = np.array([min(1.0, steps_to_expiry / self.cfg.mdp.planning_horizon)], dtype=np.float32)                               # normalize; 1.0 if expiry is beyond horizon (S3/S4), decreases to 0 as expiry approaches
+        # Steps until subsidy expiry (1.0 if expiry is at or beyond horizon, i.e. effectively permanent)
+        if self.subsidy_expiry_step >= self.cfg.mdp.planning_horizon:
+            subsidy_feature = np.array([1.0], dtype=np.float32)
+        else:
+            steps_to_expiry = max(0, self.subsidy_expiry_step - self.current_step)
+            subsidy_feature = np.array([steps_to_expiry / self.cfg.mdp.planning_horizon], dtype=np.float32)
         return np.concatenate([flat_fleet, charger_feature, ban_feature, subsidy_feature])
     
     def _get_info(self):
