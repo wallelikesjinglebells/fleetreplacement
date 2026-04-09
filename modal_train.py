@@ -60,15 +60,18 @@ SCENARIO_MAP = {
     memory=32768,
     timeout=4 * 3600,  # 4 hours per scenario
     volumes={VOLUME_PATH: volume},
+    retries=3,
 )
 def train_scenario(scenario: str):
     """Train MaskablePPO for a single scenario inside a Modal container."""
     import os
     import gymnasium as gym
     import fleetreplacement_env  # registers FleetReplacement-v0
+    import re
     from sb3_contrib import MaskablePPO
     from sb3_contrib.common.wrappers import ActionMasker
     from sb3_contrib.common.maskable.callbacks import MaskableEvalCallback
+    from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
     from stable_baselines3.common.env_util import make_vec_env
     from stable_baselines3.common.monitor import Monitor
     from stable_baselines3.common.vec_env import VecNormalize, DummyVecEnv
@@ -77,13 +80,14 @@ def train_scenario(scenario: str):
 
     os.chdir("/root")  # makes data/ relative paths in load_cost_config() work
 
-    SCENARIO_NAME = SCENARIO_MAP[scenario]
-    ENV_ID        = "FleetReplacement-v0"
-    TOTAL_STEPS   = 5_000_000
-    N_ENVS        = 16
-    EVAL_FREQ     = 10_000
-    LOG_DIR       = f"{VOLUME_PATH}/logs/scenarios/{scenario}/"
-    SAVE_PATH     = f"{VOLUME_PATH}/models/scenarios/ppo_fleet_{scenario}"
+    SCENARIO_NAME  = SCENARIO_MAP[scenario]
+    ENV_ID         = "FleetReplacement-v0"
+    TOTAL_STEPS    = 5_000_000
+    N_ENVS         = 16
+    EVAL_FREQ      = 10_000
+    LOG_DIR        = f"{VOLUME_PATH}/logs/scenarios/{scenario}/"
+    SAVE_PATH      = f"{VOLUME_PATH}/models/scenarios/ppo_fleet_{scenario}"
+    CHECKPOINT_DIR = f"{SAVE_PATH}_checkpoints"
 
     os.makedirs(LOG_DIR, exist_ok=True)
     os.makedirs(f"{VOLUME_PATH}/models/scenarios", exist_ok=True)
@@ -111,21 +115,56 @@ def train_scenario(scenario: str):
         render=False,
     )
 
-    model = MaskablePPO(
-        policy="MlpPolicy",
-        env=vec_env,
-        verbose=1,
-        learning_rate=3e-4,
-        n_steps=2048,
-        batch_size=64,
-        n_epochs=10,
-        gamma=1.0,
-        tensorboard_log=LOG_DIR,
-        ent_coef=0.05,
-        policy_kwargs=dict(net_arch=[256, 256]),
+    checkpoint_callback = CheckpointCallback(
+        save_freq=max(100_000 // N_ENVS, 1),
+        save_path=CHECKPOINT_DIR,
+        name_prefix="model",
+        save_vecnormalize=True,
     )
 
-    model.learn(total_timesteps=TOTAL_STEPS, callback=eval_callback, progress_bar=True)
+    # --- Resume from checkpoint if one exists ---
+    resumed_steps = 0
+    if os.path.isdir(CHECKPOINT_DIR):
+        volume.reload()  # ensure volume contents are up to date
+        ckpt_files = [f for f in os.listdir(CHECKPOINT_DIR) if re.fullmatch(r"model_\d+_steps\.zip", f)]
+        if ckpt_files:
+            latest = max(ckpt_files, key=lambda f: int(re.search(r"(\d+)_steps", f).group(1)))
+            resumed_steps = int(re.search(r"(\d+)_steps", latest).group(1))
+            ckpt_path = os.path.join(CHECKPOINT_DIR, latest)
+            vecnorm_path = ckpt_path.replace(".zip", "_vecnormalize.pkl")
+            print(f"[{scenario}] Resuming from checkpoint at step {resumed_steps}: {ckpt_path}")
+            model = MaskablePPO.load(ckpt_path, env=vec_env)
+            if os.path.exists(vecnorm_path):
+                vec_env = VecNormalize.load(vecnorm_path, vec_env.venv)
+                vec_env.training = True
+                sync_envs_normalization(vec_env, eval_env)
+                model.set_env(vec_env)
+        else:
+            resumed_steps = 0
+
+    if resumed_steps == 0:
+        model = MaskablePPO(
+            policy="MlpPolicy",
+            env=vec_env,
+            verbose=1,
+            learning_rate=3e-4,
+            n_steps=2048,
+            batch_size=64,
+            n_epochs=10,
+            gamma=1.0,
+            tensorboard_log=LOG_DIR,
+            ent_coef=0.05,
+            policy_kwargs=dict(net_arch=[256, 256]),
+        )
+
+    remaining_steps = TOTAL_STEPS - resumed_steps
+    print(f"[{scenario}] Training for {remaining_steps:,} steps (resumed from {resumed_steps:,})")
+    model.learn(
+        total_timesteps=remaining_steps,
+        callback=CallbackList([eval_callback, checkpoint_callback]),
+        progress_bar=True,
+        reset_num_timesteps=(resumed_steps == 0),
+    )
     model = MaskablePPO.load(f"{SAVE_PATH}/best_model")
     model.save(f"{SAVE_PATH}_final")
 
