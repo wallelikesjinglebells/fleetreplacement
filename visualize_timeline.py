@@ -6,16 +6,15 @@ records the action taken per vehicle per year, sorts vehicles by starting age
 (youngest = row 0), and plots BET and DT replacement probability heatmaps.
 
 Usage:
-    python visualize_timeline.py              # Status Quo (default)
-    python visualize_timeline.py SQ
-    python visualize_timeline.py S1
-    python visualize_timeline.py S1 --episodes 100
-    python visualize_timeline.py S1 --episodes 100 --seed 0
-    python visualize_timeline.py S1 --modal
+    python visualize_timeline.py SQ --v0
+    python visualize_timeline.py S1 --v1
+    python visualize_timeline.py S1 --v2 --episodes 100
+    python visualize_timeline.py S1 --v2 --episodes 100 --seed 0
 """
 
 import argparse
 import os
+import re as _re
 import numpy as np
 import matplotlib.pyplot as plt
 import scienceplots
@@ -49,18 +48,21 @@ parser.add_argument("--episodes", type=int, default=50,
                     help="Number of episodes to collect (default: 50)")
 parser.add_argument("--seed", type=int, default=42,
                     help="Base random seed (default: 42)")
-parser.add_argument("--modal", action="store_true",
-                    help="Load model from modal_outputs/ instead of models/")
-args = parser.parse_args()
+args, _extra = parser.parse_known_args()
+
+# Detect --vN flag dynamically (e.g. --v0, --v1, --v2, ...)
+_version_flags = [a for a in _extra if _re.fullmatch(r"--v\d+", a)]
+if len(_version_flags) == 0:
+    parser.error("A version flag is required (e.g. --v0, --v1, --v2, ...)")
+if len(_version_flags) > 1:
+    parser.error(f"Only one version flag allowed, got: {' '.join(_version_flags)}")
+_version = _version_flags[0].lstrip("-")   # "v0", "v1", ...
 
 SCENARIO_NAME = _SCENARIO_MAP[args.scenario]
 N_EPISODES    = args.episodes
 BASE_SEED     = args.seed
 _scenario_tag = args.scenario
-if args.modal:
-    MODEL_PATH = f"./modal_outputs/models/scenarios/ppo_fleet_{_scenario_tag}/best_model"
-else:
-    MODEL_PATH = f"./models/scenarios/ppo_fleet_{_scenario_tag}/best_model"
+MODEL_PATH = f"./models/{_version}/ppo_fleet_{_scenario_tag}/best_model"
 
 # ---------------------------------------------------------------------------
 # Environment factory
@@ -165,16 +167,10 @@ def plot_heatmaps(tensor: np.ndarray, start_year: int):
         plt.colorbar(im, ax=ax, label="Fraction of episodes")
 
     plt.tight_layout()
-    if args.modal:
-        os.makedirs("heatmaps/modal/SVGs", exist_ok=True)
-        os.makedirs("heatmaps/modal/PNGs", exist_ok=True)
-        svg_path = f"heatmaps/modal/SVGs/timeline_heatmap_modal_{args.scenario}.svg"
-        png_path = f"heatmaps/modal/PNGs/timeline_heatmap_modal_{args.scenario}.png"
-    else:
-        os.makedirs("heatmaps/SVGs", exist_ok=True)
-        os.makedirs("heatmaps/PNGs", exist_ok=True)
-        svg_path = f"heatmaps/SVGs/timeline_heatmap_{args.scenario}.svg"
-        png_path = f"heatmaps/PNGs/timeline_heatmap_{args.scenario}.png"
+    os.makedirs(f"heatmaps/{_version}/SVG", exist_ok=True)
+    os.makedirs(f"heatmaps/{_version}/PNG", exist_ok=True)
+    svg_path = f"heatmaps/{_version}/SVG/timeline_heatmap_{_scenario_tag}.svg"
+    png_path = f"heatmaps/{_version}/PNG/timeline_heatmap_{_scenario_tag}.png"
     plt.savefig(svg_path, bbox_inches="tight")
     plt.savefig(png_path, dpi=150, bbox_inches="tight")
     print(f"Saved: {svg_path}")
