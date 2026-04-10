@@ -9,6 +9,7 @@ Usage:
     python compare_results.py S1 --v1
     python compare_results.py SQ --v2 --trace
     python compare_results.py S1 --v2 --final
+    python compare_results.py S1 --v2_rt1
 """
 
 import argparse
@@ -55,13 +56,13 @@ parser.add_argument("--final", action="store_true",
                     help="Use the final model (ppo_fleet_SX_final.zip) instead of best_model")
 args, _extra = parser.parse_known_args()
 
-# Detect --vN flag dynamically (e.g. --v0, --v1, --v2, ...)
-_version_flags = [a for a in _extra if _re.fullmatch(r"--v\d+", a)]
+# Detect --vN flag dynamically (e.g. --v0, --v1, --v2, --v2_rt1, ...)
+_version_flags = [a for a in _extra if _re.fullmatch(r"--v\d+\w*", a)]
 if len(_version_flags) == 0:
-    parser.error("A version flag is required (e.g. --v0, --v1, --v2, ...)")
+    parser.error("A version flag is required (e.g. --v0, --v1, --v2, --v2_rt1, ...)")
 if len(_version_flags) > 1:
     parser.error(f"Only one version flag allowed, got: {' '.join(_version_flags)}")
-_version = _version_flags[0].lstrip("-")   # "v0", "v1", ...
+_version = _version_flags[0].lstrip("-")   # "v0", "v1", "v2_rt1", ...
 
 SCENARIO_NAME  = _SCENARIO_MAP[args.scenario]
 N_EPISODES     = args.episodes
