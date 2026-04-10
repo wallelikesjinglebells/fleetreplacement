@@ -82,7 +82,7 @@ def train_scenario(scenario: str):
     from sb3_contrib import MaskablePPO
     from sb3_contrib.common.wrappers import ActionMasker
     from sb3_contrib.common.maskable.callbacks import MaskableEvalCallback
-    from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
+    from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback, CallbackList
     from stable_baselines3.common.env_util import make_vec_env
     from stable_baselines3.common.monitor import Monitor
     from stable_baselines3.common.vec_env import VecNormalize, DummyVecEnv
@@ -100,6 +100,7 @@ def train_scenario(scenario: str):
     SAVE_PATH      = f"{VOLUME_PATH}/models/scenarios/ppo_fleet_{scenario}"
     CHECKPOINT_DIR = f"{SAVE_PATH}_checkpoints"
 
+    volume.reload()  # pull latest committed state before opening any volume files
     os.makedirs(LOG_DIR, exist_ok=True)
     os.makedirs(f"{VOLUME_PATH}/models/scenarios", exist_ok=True)
 
@@ -133,10 +134,27 @@ def train_scenario(scenario: str):
         save_vecnormalize=True,
     )
 
+    BEST_REWARD_PATH = f"{SAVE_PATH}/best_mean_reward.txt"
+
+    class VolumeCommitCallback(BaseCallback):
+        """Periodically commits volume writes and persists best_mean_reward."""
+        def __init__(self, vol, commit_freq_steps: int, n_envs: int):
+            super().__init__()
+            self.vol = vol
+            self.commit_freq = max(commit_freq_steps // n_envs, 1)
+
+        def _on_step(self) -> bool:
+            if self.n_calls % self.commit_freq == 0:
+                with open(BEST_REWARD_PATH, "w") as f:
+                    f.write(str(eval_callback.best_mean_reward))
+                self.vol.commit()
+            return True
+
+    commit_callback = VolumeCommitCallback(volume, commit_freq_steps=100_000, n_envs=N_ENVS)
+
     # --- Resume from checkpoint if one exists ---
     resumed_steps = 0
     if os.path.isdir(CHECKPOINT_DIR):
-        volume.reload()  # ensure volume contents are up to date
         ckpt_files = [f for f in os.listdir(CHECKPOINT_DIR) if re.fullmatch(r"model_\d+_steps\.zip", f)]
         if ckpt_files:
             latest = max(ckpt_files, key=lambda f: int(re.search(r"(\d+)_steps", f).group(1)))
@@ -150,6 +168,10 @@ def train_scenario(scenario: str):
                 vec_env.training = True
                 sync_envs_normalization(vec_env, eval_env)
                 model.set_env(vec_env)
+            if os.path.exists(BEST_REWARD_PATH):
+                with open(BEST_REWARD_PATH) as f:
+                    eval_callback.best_mean_reward = float(f.read().strip())
+                print(f"[{scenario}] Restored best_mean_reward = {eval_callback.best_mean_reward:.4f}")
         else:
             resumed_steps = 0
 
@@ -176,7 +198,7 @@ def train_scenario(scenario: str):
     print(f"[{scenario}] Training for {remaining_steps:,} steps (resumed from {resumed_steps:,})")
     model.learn(
         total_timesteps=remaining_steps,
-        callback=CallbackList([eval_callback, checkpoint_callback]),
+        callback=CallbackList([eval_callback, checkpoint_callback, commit_callback]),
         progress_bar=True,
         reset_num_timesteps=(resumed_steps == 0),
     )
