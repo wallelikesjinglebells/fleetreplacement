@@ -11,6 +11,7 @@ Usage:
     python visualize_timeline.py S1 --v2 --episodes 100
     python visualize_timeline.py S1 --v2 --episodes 100 --seed 0
     python visualize_timeline.py S1 --v2_rt1 --episodes 100
+    python visualize_timeline.py S1 --v2 --separate                 # generates separate heatmaps for DT and BET and stores them in final folder
 """
 
 import argparse
@@ -51,6 +52,8 @@ parser.add_argument("--seed", type=int, default=42,
                     help="Base random seed (default: 42)")
 parser.add_argument("--final", action="store_true",
                     help="Use the final model (ppo_fleet_SX_final.zip) instead of best_model")
+parser.add_argument("--separate", action="store_true",
+                    help="Save separate SVG/PNG files for BET and DT heatmaps")
 args, _extra = parser.parse_known_args()
 
 # Detect --vN flag dynamically (e.g. --v0, --v1, --v2, --v2_rt1, ...)
@@ -183,6 +186,41 @@ def plot_heatmaps(tensor: np.ndarray, start_year: int):
     print(f"Saved: {svg_path}")
     print(f"Saved: {png_path}")
     plt.show()
+
+    if args.separate:
+        _save_separate_heatmaps(bet_prob, dt_prob, year_labels, vehicle_labels,
+                                n_steps, n_vehicles, start_year)
+
+
+def _save_separate_heatmaps(bet_prob, dt_prob, year_labels, vehicle_labels,
+                             n_steps, n_vehicles, start_year):
+    os.makedirs("heatmaps/final/SVG", exist_ok=True)
+    os.makedirs("heatmaps/final/PNG", exist_ok=True)
+
+    panels = [
+        (bet_prob, "BET", cmap_blue),
+        (dt_prob,  "DT",  cmap_orange),
+    ]
+    for data, tag, cmap in panels:
+        fig, ax = plt.subplots(figsize=(8, 5))
+        im = ax.imshow(data, aspect="auto", vmin=0, vmax=1, cmap=cmap, origin="upper")
+        ax.set_xlabel("Year")
+        ax.set_ylabel("Vehicle rank at episode start")
+        even_year_ticks = [t for t in range(n_steps) if (start_year + t) % 2 == 0]
+        ax.set_xticks(even_year_ticks)
+        ax.set_xticklabels([year_labels[t] for t in even_year_ticks], rotation=0, ha="center", fontsize=8)
+        ax.set_yticks(range(n_vehicles))
+        ax.set_yticklabels(vehicle_labels, fontsize=8)
+        plt.colorbar(im, ax=ax, label="Fraction of episodes")
+        plt.tight_layout()
+        stem = f"timeline_heatmap_{_scenario_tag}{_model_suffix}_{tag}"
+        svg_path = f"heatmaps/final/SVG/{stem}.svg"
+        png_path = f"heatmaps/final/PNG/{stem}.png"
+        plt.savefig(svg_path, bbox_inches="tight")
+        plt.savefig(png_path, dpi=150, bbox_inches="tight")
+        print(f"Saved: {svg_path}")
+        print(f"Saved: {png_path}")
+        plt.close(fig)
 
 # ---------------------------------------------------------------------------
 # Main
