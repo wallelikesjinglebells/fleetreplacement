@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pdftotext -f 1 -l 3 \"C:/Users/mailj/OneDrive - TUM/Uni/SA/01_Introductory Work/Papers/Bakker et al., 2025 - Strategic fleet replacement for the electrification of heavy-duty road freight transportation.pdf\" -)",
+      "Bash(pdftotext -f 1 -l 3 \"C:/Users/mailj/OneDrive - TUM/Uni/SA/01_Introductory Work/Papers/Winkelmann et. al, 2024 - Green transport fleet renewal using approximate dynamic programmingA case study in German heavy-duty road transportation.pdf\" -)",
+      "Bash(pdftotext -f 1 -l 3 \"C:/Users/mailj/OneDrive - TUM/Uni/SA/01_Introductory Work/Papers/Alp et al., 2022 - Transitioning to sustainable freight transportation by integrating fleet replacement and charging infrastructure decisions.pdf\" -)",
+      "Bash(pdftotext -f 1 -l 3 \"C:/Users/mailj/OneDrive - TUM/Uni/SA/01_Introductory Work/Papers/Cording et al., 2024 - FleetRL.pdf\" -)"
+    ]
+  }
+}

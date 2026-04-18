@@ -204,14 +204,23 @@ def _save_separate_heatmaps(bet_prob, dt_prob, year_labels, vehicle_labels,
     for data, tag, cmap in panels:
         fig, ax = plt.subplots(figsize=(8, 5))
         im = ax.imshow(data, aspect="auto", vmin=0, vmax=1, cmap=cmap, origin="upper")
-        ax.set_xlabel("Year")
-        ax.set_ylabel("Vehicle rank at episode start")
-        even_year_ticks = [t for t in range(n_steps) if (start_year + t) % 2 == 0]
-        ax.set_xticks(even_year_ticks)
-        ax.set_xticklabels([year_labels[t] for t in even_year_ticks], rotation=0, ha="center", fontsize=8)
+        ax.set_xlabel("Year", fontsize=14)
+        ax.set_xticks(range(n_steps))
+        x_labels = [year_labels[t] if t % 4 == 0 else "" for t in range(n_steps)]
+        ax.set_xticklabels(x_labels, rotation=0, ha="center", fontsize=14)
         ax.set_yticks(range(n_vehicles))
-        ax.set_yticklabels(vehicle_labels, fontsize=8)
-        plt.colorbar(im, ax=ax, label="Fraction of episodes")
+        ax.set_yticklabels([""] * n_vehicles)
+        ax.tick_params(which="minor", bottom=False, left=False, top=False, right=False)
+        ax.set_ylabel("")
+        # "Age of vehicle" label + downward arrow to the left of the y-axis
+        # (origin="upper" means row 0 = youngest at top, age increases downward)
+        ax.text(-0.07, 0.5, "DT age at episode start", transform=ax.transAxes,
+                ha="center", va="center", fontsize=14, rotation=90)
+        ax.annotate("", xy=(-0.04, 0.02), xytext=(-0.04, 0.98),
+                    xycoords="axes fraction",
+                    arrowprops=dict(arrowstyle="-|>", color="black", lw=1.2),
+                    annotation_clip=False)
+        plt.colorbar(im, ax=ax).set_label("Replacement rate", fontsize=14)
         plt.tight_layout()
         stem = f"timeline_heatmap_{_scenario_tag}{_model_suffix}_{tag}"
         svg_path = f"heatmaps/final/SVG/{stem}.svg"

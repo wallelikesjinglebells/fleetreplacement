@@ -10,6 +10,10 @@ Usage:
     python compare_results.py SQ --v2 --trace
     python compare_results.py S1 --v2 --final
     python compare_results.py S1 --v2_rt1
+    python compare_results.py S1 --v1 --allbaselines    # generates plot with all baselines pooled
+    python compare_results.py SQ --v2 --allbaselinesdifference --versions SQ=v2 S1=v3 S2=v2 S3=v1 S4=v3
+                                                         # per-scenario difference plot across all scenarios
+                                                         # version pairs are optional; omitted scenarios fall back to global --vN
 """
 
 import argparse
@@ -54,6 +58,12 @@ parser.add_argument("--trace", action="store_true",
                     help="Print step-by-step output for the best baseline and the RL model")
 parser.add_argument("--final", action="store_true",
                     help="Use the final model (ppo_fleet_SX_final.zip) instead of best_model")
+parser.add_argument("--allbaselines", action="store_true",
+                    help="Also produce a 2-box poster plot: pooled heuristic baselines vs RL")
+parser.add_argument("--allbaselinesdifference", action="store_true",
+                    help="Produce a per-scenario difference plot (baseline mean cost − RL cost) across all scenarios")
+parser.add_argument("--versions", nargs="+", metavar="SCENARIO=version",
+                    help="Per-scenario version overrides for --allbaselinesdifference, e.g. S1=v1 S2=v2_rt1 (falls back to global --vN for unspecified scenarios)")
 args, _extra = parser.parse_known_args()
 
 # Detect --vN flag dynamically (e.g. --v0, --v1, --v2, --v2_rt1, ...)
@@ -63,6 +73,17 @@ if len(_version_flags) == 0:
 if len(_version_flags) > 1:
     parser.error(f"Only one version flag allowed, got: {' '.join(_version_flags)}")
 _version = _version_flags[0].lstrip("-")   # "v0", "v1", "v2_rt1", ...
+
+# Per-scenario version overrides (used by --allbaselinesdifference)
+_scenario_versions: dict[str, str] = {}
+if args.versions:
+    for entry in args.versions:
+        if "=" not in entry:
+            parser.error(f"--versions entries must be SCENARIO=version, got: {entry!r}")
+        tag, ver = entry.split("=", 1)
+        if tag not in _SCENARIO_MAP:
+            parser.error(f"Unknown scenario in --versions: {tag!r}")
+        _scenario_versions[tag] = ver
 
 SCENARIO_NAME  = _SCENARIO_MAP[args.scenario]
 N_EPISODES     = args.episodes
@@ -405,6 +426,223 @@ def plot_comparison(results: dict[str, np.ndarray]):
     plt.show()
 
 
+def plot_allbaselines_comparison(results: dict[str, np.ndarray]):
+    """2-box poster plot: all baseline rewards pooled into one box vs RL (PPO)."""
+    if "RL (PPO)" not in results:
+        print("[--allbaselines] No RL results available — skipping poster plot.")
+        return
+
+    os.makedirs(f"comparison_figures/final/PNG", exist_ok=True)
+    os.makedirs(f"comparison_figures/final/SVG", exist_ok=True)
+    png_dir = f"comparison_figures/final/PNG"
+    svg_dir = f"comparison_figures/final/SVG"
+    stem    = f"comparison_{_scenario_tag}{_model_suffix}"
+
+    baseline_pool = np.concatenate([-results[n] for n in results if n != "RL (PPO)"])
+    rl_vals       = -results["RL (PPO)"]
+
+    names  = ["Heuristic baselines", "RL"]
+    data   = [baseline_pool, rl_vals]
+    colors = [TUM_BLUE, TUM_ORANGE]
+
+    all_vals = np.concatenate([baseline_pool, rl_vals])
+    data_min, data_max = all_vals.min(), all_vals.max()
+    span = data_max - data_min
+
+    fig, (ax_top, ax_bot) = plt.subplots(
+        2, 1, sharex=True, figsize=(5, 6),
+        gridspec_kw={"height_ratios": [4, 1]},
+    )
+    fig.subplots_adjust(left=0.15, right=0.54, top=0.92, bottom=0.34, hspace=0.04, wspace=0.2)
+
+    def _draw_bp(ax):
+        bp = ax.boxplot(
+            data,
+            positions=[1, 1.15],
+            widths=0.12,
+            tick_labels=names,
+            patch_artist=True,
+            medianprops={"color": "black", "linewidth": 1.5},
+        )
+        for patch, color in zip(bp["boxes"], colors):
+            patch.set_facecolor(color)
+            patch.set_edgecolor("black")
+
+    _draw_bp(ax_top)
+    _draw_bp(ax_bot)
+
+    raw_step = span / 5
+    magnitude = 10 ** np.floor(np.log10(raw_step))
+    tick_step = round(raw_step / magnitude) * magnitude
+
+    for ax in (ax_top, ax_bot):
+        ax.set_xlim(0.82, 1.33)
+    ax_top.set_ylim(data_min - span * 0.05, data_max + span * 0.1)
+    ax_bot.set_ylim(0, data_min * 0.12)
+
+    millions = FuncFormatter(lambda x, _: f"{x / 1e6:.1f}")
+    for ax in (ax_top, ax_bot):
+        ax.yaxis.set_major_locator(MultipleLocator(tick_step))
+        ax.yaxis.set_major_formatter(millions)
+        ax.yaxis.get_offset_text().set_visible(False)
+
+    ax_top.spines["bottom"].set_visible(False)
+    ax_bot.spines["top"].set_visible(False)
+    ax_top.xaxis.tick_top()
+    ax_top.tick_params(labeltop=False)
+    ax_bot.xaxis.tick_bottom()
+
+    d = 0.5
+    bk = dict(marker=[(-1, -d), (1, d)], markersize=12,
+               linestyle="none", color="k", mec="k", mew=1, clip_on=False)
+    ax_top.plot([0, 1], [0, 0], transform=ax_top.transAxes, **bk)
+    ax_bot.plot([0, 1], [1, 1], transform=ax_bot.transAxes, **bk)
+
+    ax_top.set_ylabel("Costs (EUR millions)")
+
+    png_path = f"{png_dir}/{stem}_allbaselines_box.png"
+    svg_path = f"{svg_dir}/{stem}_allbaselines_box.svg"
+    fig.savefig(png_path, dpi=150)
+    fig.savefig(svg_path)
+    print(f"Saved: {png_path}")
+    print(f"Saved: {svg_path}")
+    plt.show()
+
+
+# ---------------------------------------------------------------------------
+# Helpers for multi-scenario evaluation (used by --allbaselinesdifference)
+# ---------------------------------------------------------------------------
+_SHORT_LABELS = {
+    "SQ": "Status Quo",
+    "S1": "Scenario 1",
+    "S2": "Scenario 2",
+    "S3": "Scenario 3",
+    "S4": "Scenario 4",
+}
+
+
+def _make_env_for(scenario_name, masked=False):
+    cfg = FleetEnvConfig(mdp=MDPConfig(), cost=load_cost_config(scenario_name=scenario_name))
+    env = gym.make("FleetReplacement-v0", config=cfg)
+    if masked:
+        from sb3_contrib.common.wrappers import ActionMasker
+        env = ActionMasker(env, lambda e: e.unwrapped.action_masks())
+    return env
+
+
+def _evaluate_policy_for(policy_fn, scenario_name, policy_kwargs=None) -> np.ndarray:
+    env = _make_env_for(scenario_name)
+    cfg = env.unwrapped.cfg.mdp
+    eval_steps = min(cfg.planning_horizon, CUTOFF_YEAR - cfg.start_year)
+    rewards = np.array([
+        run_episode(policy_fn, env, seed=BASE_SEED + ep, policy_kwargs=policy_kwargs,
+                    eval_steps=eval_steps)
+        for ep in range(N_EPISODES)
+    ])
+    env.close()
+    return rewards
+
+
+def _evaluate_rl_for(scenario_tag) -> np.ndarray | None:
+    from sb3_contrib import MaskablePPO
+    ver = _scenario_versions.get(scenario_tag, _version)
+    if args.final:
+        path = f"./models/{ver}/ppo_fleet_{scenario_tag}_final"
+    else:
+        path = f"./models/{ver}/ppo_fleet_{scenario_tag}/best_model"
+    if not os.path.exists(path + ".zip"):
+        print(f"  [RL] No model found for {scenario_tag} at {path}.zip — skipping.")
+        return None
+    model = MaskablePPO.load(path)
+    scenario_name = _SCENARIO_MAP[scenario_tag]
+    env = _make_env_for(scenario_name, masked=True)
+    cfg = env.unwrapped.cfg.mdp
+    eval_steps = min(cfg.planning_horizon, CUTOFF_YEAR - cfg.start_year)
+    rewards = []
+    for ep in range(N_EPISODES):
+        obs, _ = env.reset(seed=BASE_SEED + ep)
+        done = False
+        total_reward = 0.0
+        step = 0
+        while not done:
+            action, _ = model.predict(obs, deterministic=True, action_masks=env.action_masks())
+            obs, reward, terminated, truncated, _ = env.step(action)
+            step += 1
+            if step <= eval_steps:
+                total_reward += reward
+            done = terminated or truncated
+        rewards.append(total_reward)
+    env.close()
+    return np.array(rewards)
+
+
+def compute_difference_data(baselines_list) -> dict[str, np.ndarray]:
+    """For each scenario, compute per-episode cost savings: mean_baseline_cost − RL_cost.
+    Positive = RL is cheaper."""
+    diff_data = {}
+    scenarios = {t: _SCENARIO_MAP[t] for t in _scenario_versions} if _scenario_versions else _SCENARIO_MAP
+    for scenario_tag, scenario_name in scenarios.items():
+        ver = _scenario_versions.get(scenario_tag, _version)
+        print(f"\n  Scenario: {scenario_name}  (version: {ver})")
+        baseline_rewards = []
+        for name, fn, kwargs in baselines_list:
+            r = _evaluate_policy_for(fn, scenario_name, policy_kwargs=kwargs)
+            baseline_rewards.append(r)
+            print(f"    {name:<22}  mean EUR {np.mean(r):>14,.0f}")
+        baseline_rewards = np.array(baseline_rewards)   # (n_baselines, n_episodes)
+        mean_baseline_cost = -np.mean(baseline_rewards, axis=0)  # (n_episodes,) in EUR
+
+        rl_rewards = _evaluate_rl_for(scenario_tag)
+        if rl_rewards is None:
+            continue
+        rl_cost = -rl_rewards  # (n_episodes,) in EUR
+        print(f"    {'RL':<22}  mean EUR {np.mean(rl_rewards):>14,.0f}")
+
+        diff_data[scenario_tag] = mean_baseline_cost - rl_cost  # positive = RL cheaper
+    return diff_data
+
+
+def plot_allbaselines_difference(diff_data: dict[str, np.ndarray]):
+    """Box plot: per-episode cost savings (baseline mean − RL) per scenario."""
+    out_png = "comparison_figures/final/allbaselinesdifference/PNG"
+    out_svg = "comparison_figures/final/allbaselinesdifference/SVG"
+    os.makedirs(out_png, exist_ok=True)
+    os.makedirs(out_svg, exist_ok=True)
+
+    scenario_tags  = list(diff_data.keys())
+    labels = [_SHORT_LABELS[t] for t in scenario_tags]
+    data   = [diff_data[t] / 1e6 for t in scenario_tags]  # EUR → EUR millions
+
+    suffix = "_final" if args.final else ""
+    stem = f"comparison_allscenarios{suffix}_allbaselinesdifference"
+    png_path = f"{out_png}/{stem}.png"
+    svg_path = f"{out_svg}/{stem}.svg"
+
+    with plt.rc_context({"font.size": 9, "axes.labelsize": 9, "xtick.labelsize": 9, "ytick.labelsize": 9}):
+        fig, ax = plt.subplots(figsize=(7, 4))
+        fig.subplots_adjust(left=0.12, right=0.73, top=0.95, bottom=0.22, hspace=0.2, wspace=0.2)
+
+        bp = ax.boxplot(
+            data,
+            tick_labels=labels,
+            patch_artist=True,
+            medianprops={"color": "black", "linewidth": 1.5},
+        )
+        for patch in bp["boxes"]:
+            patch.set_facecolor(TUM_BLUE)
+            patch.set_edgecolor("black")
+
+        ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
+        ax.set_ylabel("RL cost savings vs. baselines\n(EUR M, 20-year horizon)")
+        ax.tick_params(axis="x", rotation=0)
+
+        fig.savefig(png_path, dpi=150)
+        fig.savefig(svg_path)
+    print(f"\nSaved: {png_path}")
+    print(f"Saved: {svg_path}")
+    plt.show()
+
+
 # ---------------------------------------------------------------------------
 # All baselines to benchmark
 # ---------------------------------------------------------------------------
@@ -485,6 +723,12 @@ if rl_rewards is not None:
 print()
 
 plot_comparison(results)
+if args.allbaselines:
+    plot_allbaselines_comparison(results)
+if args.allbaselinesdifference:
+    print("\n--- Computing difference data across all scenarios ---")
+    diff_data = compute_difference_data(BASELINES)
+    plot_allbaselines_difference(diff_data)
 
 # ---------------------------------------------------------------------------
 # Optional: step-by-step trace for the best baseline and the RL model
