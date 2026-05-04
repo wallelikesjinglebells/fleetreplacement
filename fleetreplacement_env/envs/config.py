@@ -15,8 +15,8 @@ from pathlib import Path
 class MDPConfig:
     # MDP parameters with default values
     n_vehicles: int = 10            # fleet size
-    max_possible_vehicle_age: int = 0       # max max_vehicle_age across all scenarios, used for obs normalization; set via load_max_vehicle_age()
-    max_possible_lifetime_km: float = 0.0   # max max_lifetime_km across all scenarios, used for obs normalization; set via load_max_lifetime_km()
+    # max_possible_vehicle_age: int = 0       # max max_vehicle_age across all scenarios, used for obs normalization; set via load_max_vehicle_age()
+    # max_possible_lifetime_km: float = 0.0   # max max_lifetime_km across all scenarios, used for obs normalization; set via load_max_lifetime_km()
     planning_horizon: int = 30      # planning time horizon in years (when is one training episode over?)
     start_year: int = 2026          # current year (needed for calculating DT purchase ban step)
 
