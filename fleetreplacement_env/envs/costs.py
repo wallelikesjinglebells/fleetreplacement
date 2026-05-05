@@ -44,9 +44,6 @@ class StepCost:
     insurance: float = 0.0
     tax: float = 0.0
 
-    # Mid-life battery replacement
-    battery_replacement: float = 0.0
-
     @property
     def capex_net(self) -> float:
         """Net capital outlay: gross CAPEX plus infrastructure, minus subsidy and salvage of old vehicle"""
@@ -63,7 +60,7 @@ class StepCost:
     @property
     def total(self) -> float:
         """Scalar cost for this vehicle this year, negated in fleet_replacement.py for RL reward"""
-        return self.capex_net + self.opex_total + self.battery_replacement
+        return self.capex_net + self.opex_total
 
     def as_dict(self) -> dict[str, float]:
         """Utility method for conversion into dictionary for debugging"""
@@ -78,7 +75,6 @@ class StepCost:
             "driver": self.driver,
             "insurance": self.insurance,
             "tax": self.tax,
-            "battery_replacement": self.battery_replacement,
             "total": self.total,
         }
 

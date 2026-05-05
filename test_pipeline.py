@@ -223,9 +223,6 @@ try:
                                     annual_km=annual_km, cfg=cfg, current_year=2026)
     check("keep BET  → opex_total > 0", sc_keep_bet.opex_total > 0,
           f"got {sc_keep_bet.opex_total:.0f}")
-    check("keep BET (age 3) → no battery_replacement",
-          sc_keep_bet.battery_replacement == 0.0,
-          f"got {sc_keep_bet.battery_replacement:.0f}")
 
     # ── BET maintenance increases with age (battery amortisation) ─────
     sc_bet_young = compute_opex(tech=1, annual_km=annual_km, cfg=cfg, age=1.0)
