@@ -28,9 +28,11 @@ max_age is scenario-specific; ~1 440 states total — solved in milliseconds.
 
 Usage
 -----
-    python per_vehicle_dp.py                   # all 5 scenarios, 200 episodes
-    python per_vehicle_dp.py SQ                # Status Quo only
+    python per_vehicle_dp.py                        # all 5 scenarios, 200 episodes
+    python per_vehicle_dp.py SQ                     # Status Quo only
     python per_vehicle_dp.py S1 --episodes 500
+    python per_vehicle_dp.py SQ --timeline          # heatmap, 50 episodes, seed 42
+    python per_vehicle_dp.py S2 --timeline --episodes 100 --seed 0
 """
 
 import argparse
@@ -377,9 +379,10 @@ def evaluate_dp_policy(
     return summary statistics.
 
     The two VehicleDPs are solved once per scenario.  For each episode the
-    fleet is reset (random composition), solve_fleet() picks the best
-    first-buyer assignment using the pre-computed V tables, and actions are
-    read from the policy arrays.
+    fleet is reset with seed=seed+ep (matching collect_dp_action_tensor and
+    visualize_timeline.py), solve_fleet() picks the best first-buyer
+    assignment using the pre-computed V tables, and actions are read from
+    the policy arrays.
 
     Parameters
     ----------
@@ -402,13 +405,11 @@ def evaluate_dp_policy(
     dp_first = run_vehicle_dp(cfg, fleet_charger_exists=False)
 
     env = gym.make("FleetReplacement-v0", config=cfg)
-    rng = np.random.default_rng(seed)
 
     rewards: list[float] = []
 
-    for _ in range(n_episodes):
-        ep_seed = int(rng.integers(0, 2**31))
-        env.reset(seed=ep_seed)
+    for ep in range(n_episodes):
+        env.reset(seed=seed + ep)   # same scheme as collect_dp_action_tensor
 
         # Pick first-buyer assignment for this episode's initial fleet
         fleet_state   = env.unwrapped.fleet_state.copy()
@@ -444,6 +445,143 @@ def evaluate_dp_policy(
 
 
 # ---------------------------------------------------------------------------
+# Timeline heatmap (mirrors visualize_timeline.py, same seeding scheme)
+# ---------------------------------------------------------------------------
+
+_CUTOFF_YEAR = 2046   # drop end-of-horizon steps beyond this year
+
+
+def collect_dp_action_tensor(
+    scenario_tag: str,
+    n_episodes: int = 50,
+    seed: int = 42,
+) -> tuple[np.ndarray, int]:
+    """
+    Roll out the DP policy for n_episodes and record per-vehicle actions.
+
+    Uses env.reset(seed=seed + ep) to match visualize_timeline.py exactly,
+    so both scripts operate on identical randomly-initialised fleets.
+
+    Returns
+    -------
+    tensor     : (n_episodes, n_vehicles, n_steps) int32
+                 rows sorted by ascending starting age (rank 0 = youngest)
+    start_year : int
+    """
+    scenario_name = _SCENARIO_MAP[scenario_tag]
+    cfg = FleetEnvConfig(mdp=SDPConfig(), cost=load_cost_config(scenario_name=scenario_name))
+
+    dp_infra = run_vehicle_dp(cfg, fleet_charger_exists=True)
+    dp_first = run_vehicle_dp(cfg, fleet_charger_exists=False)
+
+    env        = gym.make("FleetReplacement-v0", config=cfg)
+    n_vehicles = cfg.mdp.n_vehicles
+    n_steps    = cfg.mdp.planning_horizon
+    start_year = cfg.mdp.start_year
+
+    tensor = np.empty((n_episodes, n_vehicles, n_steps), dtype=np.int32)
+
+    for ep in range(n_episodes):
+        env.reset(seed=seed + ep)   # identical seed scheme to visualize_timeline.py
+
+        fleet_state   = env.unwrapped.fleet_state.copy()
+        charger_slots = env.unwrapped.charger_slots.copy()
+
+        age_rank = np.argsort(fleet_state[:, 1])   # youngest → oldest
+
+        result = solve_fleet(cfg, fleet_state, charger_slots, dp_infra, dp_first)
+
+        actions_ep = np.empty((n_vehicles, n_steps), dtype=np.int32)
+        done = False
+        t    = 0
+
+        while not done:
+            fleet_state   = env.unwrapped.fleet_state.copy()
+            charger_slots = env.unwrapped.charger_slots.copy()
+            action        = get_dp_action(result, fleet_state, charger_slots, t)
+
+            _, _, terminated, truncated, _ = env.step(action)
+            actions_ep[:, t] = action
+            done = terminated or truncated
+            t   += 1
+
+        tensor[ep] = actions_ep[age_rank, :]
+
+    env.close()
+    return tensor, start_year
+
+
+def plot_dp_heatmaps(
+    tensor: np.ndarray,
+    start_year: int,
+    scenario_tag: str,
+    scenario_name: str,
+    n_episodes: int,
+    save_dir: str = "heatmaps/dp",
+) -> None:
+    """Plot BET and DT replacement-probability heatmaps for the DP policy."""
+    import os
+    import matplotlib.pyplot as plt
+    import scienceplots          # noqa: F401 — registers the style
+    plt.style.use(["science", "nature", "grid"])
+    plt.rcParams["text.usetex"] = False
+    plt.rcParams["font.family"] = "Arial"
+    from tum_colors import cmap_blue, cmap_orange
+
+    n_vehicles = tensor.shape[1]
+    n_steps    = tensor.shape[2]
+
+    n_eval  = min(n_steps, _CUTOFF_YEAR - start_year)
+    tensor  = tensor[:, :, :n_eval]
+    n_steps = n_eval
+
+    bet_prob = np.mean(tensor == 2, axis=0)   # (n_vehicles, n_steps)
+    dt_prob  = np.mean(tensor == 1, axis=0)
+
+    year_labels = [str(start_year + t) for t in range(n_steps)]
+    vehicle_labels = [
+        f"Rank {i} (youngest)" if i == 0
+        else f"Rank {i} (oldest)" if i == n_vehicles - 1
+        else f"Rank {i}"
+        for i in range(n_vehicles)
+    ]
+
+    fig, axes = plt.subplots(1, 2, figsize=(15, 5))
+    fig.suptitle(
+        f"Replacement probability — {scenario_name}\n"
+        f"(DP policy, {n_episodes} episodes, rows sorted by starting age)",
+        fontsize=12,
+    )
+
+    panels = [
+        (axes[0], bet_prob, "BET replacement probability", cmap_blue),
+        (axes[1], dt_prob,  "DT replacement probability",  cmap_orange),
+    ]
+    for ax, data, title, cmap in panels:
+        im = ax.imshow(data, aspect="auto", vmin=0, vmax=1, cmap=cmap, origin="upper")
+        ax.set_title(title)
+        ax.set_xlabel("Year")
+        ax.set_ylabel("Vehicle rank at episode start")
+        even_ticks = [t for t in range(n_steps) if (start_year + t) % 2 == 0]
+        ax.set_xticks(even_ticks)
+        ax.set_xticklabels([year_labels[t] for t in even_ticks], rotation=0, ha="center", fontsize=8)
+        ax.set_yticks(range(n_vehicles))
+        ax.set_yticklabels(vehicle_labels, fontsize=8)
+        plt.colorbar(im, ax=ax, label="Fraction of episodes")
+
+    plt.tight_layout()
+    os.makedirs(f"{save_dir}/SVG", exist_ok=True)
+    os.makedirs(f"{save_dir}/PNG", exist_ok=True)
+    svg_path = f"{save_dir}/SVG/timeline_heatmap_dp_{scenario_tag}.svg"
+    png_path = f"{save_dir}/PNG/timeline_heatmap_dp_{scenario_tag}.png"
+    plt.savefig(svg_path, bbox_inches="tight")
+    plt.savefig(png_path, dpi=150, bbox_inches="tight")
+    print(f"Saved: {svg_path}")
+    print(f"Saved: {png_path}")
+    plt.show()
+
+
+# ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
 
@@ -466,23 +604,42 @@ if __name__ == "__main__":
         "--seed", type=int, default=42,
         help="Master RNG seed (default: 42)",
     )
+    parser.add_argument(
+        "--timeline", action="store_true",
+        help="Generate timeline heatmap instead of evaluation table (requires a single scenario)",
+    )
     args = parser.parse_args()
 
-    scenarios = list(_SCENARIO_MAP.keys()) if args.scenario == "ALL" else [args.scenario]
-
-    print(f"\nPer-vehicle DP evaluation  —  {args.episodes} episodes/scenario")
-    print("=" * 68)
-    print(f"{'Scenario':<10} {'Mean NPV (€)':>16} {'Std':>12} {'Min':>12} {'Max':>12}")
-    print("-" * 68)
-
-    for tag in scenarios:
-        stats = evaluate_dp_policy(tag, n_episodes=args.episodes, seed=args.seed)
-        print(
-            f"{stats['scenario']:<10}"
-            f"{stats['mean_reward']:>16,.0f}"
-            f"{stats['std_reward']:>12,.0f}"
-            f"{stats['min_reward']:>12,.0f}"
-            f"{stats['max_reward']:>12,.0f}"
+    if args.timeline:
+        if args.scenario == "ALL":
+            parser.error("--timeline requires a single scenario tag (e.g. SQ), not ALL")
+        n_ep = args.episodes if args.episodes != 200 else 50   # match visualize_timeline default
+        print(f"\nDP timeline  —  scenario {args.scenario}, {n_ep} episodes, seed {args.seed}")
+        tensor, start_year = collect_dp_action_tensor(
+            args.scenario, n_episodes=n_ep, seed=args.seed
         )
+        plot_dp_heatmaps(
+            tensor, start_year,
+            scenario_tag=args.scenario,
+            scenario_name=_SCENARIO_MAP[args.scenario],
+            n_episodes=n_ep,
+        )
+    else:
+        scenarios = list(_SCENARIO_MAP.keys()) if args.scenario == "ALL" else [args.scenario]
 
-    print("=" * 68)
+        print(f"\nPer-vehicle DP evaluation  —  {args.episodes} episodes/scenario")
+        print("=" * 68)
+        print(f"{'Scenario':<10} {'Mean NPV (€)':>16} {'Std':>12} {'Min':>12} {'Max':>12}")
+        print("-" * 68)
+
+        for tag in scenarios:
+            stats = evaluate_dp_policy(tag, n_episodes=args.episodes, seed=args.seed)
+            print(
+                f"{stats['scenario']:<10}"
+                f"{stats['mean_reward']:>16,.0f}"
+                f"{stats['std_reward']:>12,.0f}"
+                f"{stats['min_reward']:>12,.0f}"
+                f"{stats['max_reward']:>12,.0f}"
+            )
+
+        print("=" * 68)
