@@ -26,7 +26,7 @@ plt.rcParams["font.family"] = "Arial"
 from tum_colors import cmap_blue, cmap_orange
 import gymnasium as gym
 import fleetreplacement_env
-from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config
+from fleetreplacement_env.envs.config import FleetEnvConfig, SDPConfig, load_cost_config
 
 os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
@@ -79,7 +79,7 @@ else:
 # ---------------------------------------------------------------------------
 def make_env_masked():
     from sb3_contrib.common.wrappers import ActionMasker
-    cfg = FleetEnvConfig(mdp=MDPConfig(), cost=load_cost_config(scenario_name=SCENARIO_NAME))
+    cfg = FleetEnvConfig(mdp=SDPConfig(), cost=load_cost_config(scenario_name=SCENARIO_NAME))
     env = gym.make("FleetReplacement-v0", config=cfg)
     return ActionMasker(env, lambda e: e.unwrapped.action_masks())
 

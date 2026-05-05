@@ -39,7 +39,7 @@ import numpy as np
 import gymnasium as gym
 
 import fleetreplacement_env          # registers FleetReplacement-v0
-from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config
+from fleetreplacement_env.envs.config import FleetEnvConfig, SDPConfig, load_cost_config
 from fleetreplacement_env.envs.costs import compute_step_cost
 
 
@@ -393,7 +393,7 @@ def evaluate_dp_policy(
     """
     scenario_name = _SCENARIO_MAP[scenario_tag]
     cfg = FleetEnvConfig(
-        mdp  = MDPConfig(),
+        mdp  = SDPConfig(),
         cost = load_cost_config(scenario_name=scenario_name),
     )
 

@@ -95,7 +95,7 @@ section("LAYER 2 — config.py: load_cost_config()")
 
 try:
     from fleetreplacement_env.envs.config import (
-        CostConfig, MDPConfig, FleetEnvConfig, load_cost_config
+        CostConfig, SDPConfig, FleetEnvConfig, load_cost_config
     )
     check("config.py imports OK", True)
 
@@ -129,8 +129,8 @@ try:
     check(f"  cfg.maint_age_factor_bet is finite & > 0  (got {mafb:.4g})",
           np.isfinite(mafb) and mafb > 0)
 
-    mdp = MDPConfig()
-    check("MDPConfig() constructs OK", mdp.n_vehicles == 10)
+    mdp = SDPConfig()
+    check("SDPConfig() constructs OK", mdp.n_vehicles == 10)
     full = FleetEnvConfig(mdp=mdp, cost=cfg)
     check("FleetEnvConfig() constructs OK", True)
 
@@ -530,10 +530,10 @@ try:
     from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
     check("SB3 / sb3_contrib imports OK", True)
 
-    from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config
+    from fleetreplacement_env.envs.config import FleetEnvConfig, SDPConfig, load_cost_config
 
     def _make_masked():
-        cfg = FleetEnvConfig(mdp=MDPConfig(), cost=load_cost_config(scenario_name="Status Quo"))
+        cfg = FleetEnvConfig(mdp=SDPConfig(), cost=load_cost_config(scenario_name="Status Quo"))
         e = gym.make("FleetReplacement-v0", config=cfg)
         return ActionMasker(e, lambda env: env.unwrapped.action_masks())
 
@@ -549,7 +549,7 @@ try:
     check(f"model.learn({SMOKE_STEPS} steps) completes without error", True)
 
     # Verify predict() respects masks on a single obs
-    cfg_raw = FleetEnvConfig(mdp=MDPConfig(), cost=load_cost_config(scenario_name="Status Quo"))
+    cfg_raw = FleetEnvConfig(mdp=SDPConfig(), cost=load_cost_config(scenario_name="Status Quo"))
     raw_env = gym.make("FleetReplacement-v0", config=cfg_raw)
     raw_env = ActionMasker(raw_env, lambda env: env.unwrapped.action_masks())
     obs, _ = raw_env.reset(seed=0)

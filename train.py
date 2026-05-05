@@ -19,7 +19,7 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import VecNormalize, DummyVecEnv
 from stable_baselines3.common.vec_env import sync_envs_normalization
-from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config
+from fleetreplacement_env.envs.config import FleetEnvConfig, SDPConfig, load_cost_config
 
 
 _SCENARIO_MAP = {
@@ -56,7 +56,7 @@ SAVE_PATH     = f"./models/scenarios/ppo_fleet_{_scenario_tag}"
 
 # Wrap env with ActionMasker, loading the correct scenario config
 def make_masked_env():
-    cfg = FleetEnvConfig(mdp=MDPConfig(), cost=load_cost_config(scenario_name=SCENARIO_NAME))
+    cfg = FleetEnvConfig(mdp=SDPConfig(), cost=load_cost_config(scenario_name=SCENARIO_NAME))
     env = gym.make(ENV_ID, config=cfg)
     env = ActionMasker(env, lambda e: e.unwrapped.action_masks())
     return env

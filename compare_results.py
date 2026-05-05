@@ -29,7 +29,7 @@ plt.rcParams["font.family"] = "Arial"
 from tum_colors import TUM_BLUE, TUM_ORANGE
 import gymnasium as gym
 import fleetreplacement_env
-from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config
+from fleetreplacement_env.envs.config import FleetEnvConfig, SDPConfig, load_cost_config
 
 # Suppress TensorFlow oneDNN notifications before sb3_contrib imports TF
 os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
@@ -99,7 +99,7 @@ else:
 # Environment factories
 # ---------------------------------------------------------------------------
 def make_env(render_mode=None):
-    cfg = FleetEnvConfig(mdp=MDPConfig(), cost=load_cost_config(scenario_name=SCENARIO_NAME))
+    cfg = FleetEnvConfig(mdp=SDPConfig(), cost=load_cost_config(scenario_name=SCENARIO_NAME))
     return gym.make("FleetReplacement-v0", config=cfg, render_mode=render_mode)
 
 
@@ -522,7 +522,7 @@ _SHORT_LABELS = {
 
 
 def _make_env_for(scenario_name, masked=False):
-    cfg = FleetEnvConfig(mdp=MDPConfig(), cost=load_cost_config(scenario_name=scenario_name))
+    cfg = FleetEnvConfig(mdp=SDPConfig(), cost=load_cost_config(scenario_name=scenario_name))
     env = gym.make("FleetReplacement-v0", config=cfg)
     if masked:
         from sb3_contrib.common.wrappers import ActionMasker

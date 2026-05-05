@@ -7,7 +7,7 @@ Defines the FleetReplacementEnv: state space (vehicle ages and mileages), action
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-from fleetreplacement_env.envs.config import FleetEnvConfig, MDPConfig, load_cost_config
+from fleetreplacement_env.envs.config import FleetEnvConfig, SDPConfig, load_cost_config
 from fleetreplacement_env.envs.costs import compute_step_cost
 
 class FleetReplacementEnv(gym.Env):
@@ -19,7 +19,7 @@ class FleetReplacementEnv(gym.Env):
         # If no config is pased, build a default config by loading from CSV files
         if config is None:
             config = FleetEnvConfig(
-                mdp = MDPConfig(
+                mdp = SDPConfig(
                     # max_possible_lifetime_km and max_possible_vehicle_age were previously loaded here as fixed normalization denominators for the observation space (cross-scenario max)
                     # Mileage is now normalized by the scenario-specific cfg.cost.max_lifetime_km instead
                     # max_possible_lifetime_km=load_max_lifetime_km(),
@@ -30,9 +30,9 @@ class FleetReplacementEnv(gym.Env):
         self.cfg = config                     # holds self.cfg.mdp and self.cfg.cost
         # Previously asserted that cross-scenario max normalization denominators were set, now obsolete since obs normalization uses scenario-specific cfg.cost.max_lifetime_km (see above)
         # assert self.cfg.mdp.max_possible_lifetime_km > 0, \
-        #     "MDPConfig.max_possible_lifetime_km must be set — use load_max_lifetime_km()"
+        #     "SDPConfig.max_possible_lifetime_km must be set — use load_max_lifetime_km()"
         # assert self.cfg.mdp.max_possible_vehicle_age > 0, \
-        #     "MDPConfig.max_possible_vehicle_age must be set — use load_max_vehicle_age()"
+        #     "SDPConfig.max_possible_vehicle_age must be set — use load_max_vehicle_age()"
 
         self.current_step = 0
         self.fleet_state: np.ndarray | None = None  # represent unitialized state, for guard in step()

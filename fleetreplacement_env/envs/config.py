@@ -1,7 +1,7 @@
 """
 Configuration dataclasses and CSV loaders for the fleet replacement environment.
 
-Defines MDPConfig (MDP hyperparameters), CostConfig (scenario cost tables), and FleetEnvConfig (combined config), plus helpers to load cost data from CSV.
+Defines SDPConfig (MDP hyperparameters), CostConfig (scenario cost tables), and FleetEnvConfig (combined config), plus helpers to load cost data from CSV.
 """
 
 import pandas as pd
@@ -12,7 +12,7 @@ from pathlib import Path
 
 # MDP parameters for fleet_replacement.py
 @dataclass
-class MDPConfig:
+class SDPConfig:
     # MDP parameters with default values
     n_vehicles: int = 10            # fleet size
     # max_possible_vehicle_age: int = 0       # max max_vehicle_age across all scenarios, used for obs normalization; set via load_max_vehicle_age()
@@ -55,7 +55,7 @@ class CostConfig:
     maint_age_factor_bet: float # is 0 for now
 
     # shared params
-    akt_base: float             # Clara: annual km for long-haul, no longer in MDPConfig (SSOT here)
+    akt_base: float             # Clara: annual km for long-haul, no longer in SDPConfig (SSOT here)
     avg_speed: float
     # wage_factor: float        # is 1, omitted
 
@@ -73,7 +73,7 @@ class CostConfig:
     efficiency_factor_dt: float
     efficiency_factor_bet: float
 
-    # Lifetime cap (from scenario; can align with MDPConfig.max_mileage)
+    # Lifetime cap (from scenario; can align with SDPConfig.max_mileage)
     max_lifetime_km: float
 
     # Subsidy
@@ -116,7 +116,7 @@ class CostConfig:
 # Composition
 @dataclass
 class FleetEnvConfig:
-    mdp: MDPConfig
+    mdp: SDPConfig
     cost: CostConfig
 
 # Load parameters
