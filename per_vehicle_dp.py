@@ -597,8 +597,8 @@ if __name__ == "__main__":
         help="Scenario tag to evaluate (default: ALL)",
     )
     parser.add_argument(
-        "--episodes", type=int, default=200, metavar="N",
-        help="Episodes per scenario (default: 200)",
+        "--episodes", type=int, default=50, metavar="N",
+        help="Episodes per scenario (default: 50)",
     )
     parser.add_argument(
         "--seed", type=int, default=42,
@@ -613,7 +613,7 @@ if __name__ == "__main__":
     if args.timeline:
         if args.scenario == "ALL":
             parser.error("--timeline requires a single scenario tag (e.g. SQ), not ALL")
-        n_ep = args.episodes if args.episodes != 200 else 50   # match visualize_timeline default
+        n_ep = args.episodes
         print(f"\nDP timeline  —  scenario {args.scenario}, {n_ep} episodes, seed {args.seed}")
         tensor, start_year = collect_dp_action_tensor(
             args.scenario, n_episodes=n_ep, seed=args.seed

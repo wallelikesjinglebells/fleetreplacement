@@ -1,20 +1,14 @@
 """
-Baseline + RL evaluation (direct comparison)
+Baseline evaluation with scenario-appropriate heuristics and RL comparison.
 
-Runs several "manual" policies and the trained MaskablePPO model on the same
-environment so that all results are directly comparable.
+Runs the scenario-appropriate baseline set and the trained MaskablePPO model on the same environment so all results are comparable.
 
 Usage:
-    python compare_results.py SQ --v0
-    python compare_results.py S1 --v1
-    python compare_results.py SQ --v2 --trace
-    python compare_results.py S1 --v2 --final
-    python compare_results.py S1 --v2_rt1
-    python compare_results.py S1 --v1 --allbaselines    # generates plot with all baselines pooled
-    python compare_results.py SQ --v2 --allbaselinesdifference --versions SQ=v2 S1=v3 S2=v2 S3=v1 S4=v3
-                                                         # per-scenario difference plot across all scenarios
-                                                         # version pairs are optional; omitted scenarios fall back to global --vN
-    python compare_results.py SQ --v1 --no-plot         # print terminal output only, skip all plot generation
+    python compare_to_baselines.py SQ --v2
+    python compare_to_baselines.py S1 --v3
+    python compare_to_baselines.py S1 --v2 --no-plot
+    python compare_to_baselines.py S1 --v2 --allbaselines
+    python compare_to_baselines.py SQ --v2 --allbaselinesdifference --versions SQ=v2 S1=v3 S2=v2 S3=v1 S4=v3
 """
 
 import argparse
@@ -31,12 +25,15 @@ from tum_colors import TUM_BLUE, TUM_ORANGE
 import gymnasium as gym
 import fleetreplacement_env
 from fleetreplacement_env.envs.config import FleetEnvConfig, SDPConfig, load_cost_config
+from fleetreplacement_env.envs.costs import compute_step_cost
 
-# Suppress TensorFlow oneDNN notifications before sb3_contrib imports TF
 os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
-CUTOFF_YEAR = 2046   # evaluate costs only up to (exclusive) this year to mitigate EOH effects
+CUTOFF_YEAR = 2046
+
+_BAN_SCENARIOS    = {"SQ", "S3", "S4"}
+_NO_BAN_SCENARIOS = {"S1", "S2"}
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -55,29 +52,25 @@ parser.add_argument("--episodes", type=int, default=50,
                     help="Number of episodes per policy (default: 50)")
 parser.add_argument("--seed", type=int, default=42,
                     help="Base random seed (default: 42)")
-parser.add_argument("--trace", action="store_true",
-                    help="Print step-by-step output for the best baseline and the RL model")
 parser.add_argument("--final", action="store_true",
-                    help="Use the final model (ppo_fleet_SX_final.zip) instead of best_model")
+                    help="Use ppo_fleet_SX_final.zip instead of best_model")
 parser.add_argument("--allbaselines", action="store_true",
-                    help="Also produce a 2-box poster plot: pooled heuristic baselines vs RL")
+                    help="Also produce a 2-box poster plot: pooled baselines vs RL")
 parser.add_argument("--allbaselinesdifference", action="store_true",
-                    help="Produce a per-scenario difference plot (baseline mean cost − RL cost) across all scenarios")
+                    help="Produce per-scenario cost-savings plot across all scenarios")
 parser.add_argument("--no-plot", action="store_true",
                     help="Print terminal output only; skip all plot generation")
 parser.add_argument("--versions", nargs="+", metavar="SCENARIO=version",
-                    help="Per-scenario version overrides for --allbaselinesdifference, e.g. S1=v1 S2=v2_rt1 (falls back to global --vN for unspecified scenarios)")
+                    help="Per-scenario version overrides for --allbaselinesdifference")
 args, _extra = parser.parse_known_args()
 
-# Detect --vN flag dynamically (e.g. --v0, --v1, --v2, --v2_rt1, ...)
 _version_flags = [a for a in _extra if _re.fullmatch(r"--v\d+\w*", a)]
 if len(_version_flags) == 0:
-    parser.error("A version flag is required (e.g. --v0, --v1, --v2, --v2_rt1, ...)")
+    parser.error("A version flag is required (e.g. --v0, --v1, --v2, ...)")
 if len(_version_flags) > 1:
     parser.error(f"Only one version flag allowed, got: {' '.join(_version_flags)}")
-_version = _version_flags[0].lstrip("-")   # "v0", "v1", "v2_rt1", ...
+_version = _version_flags[0].lstrip("-")
 
-# Per-scenario version overrides (used by --allbaselinesdifference)
 _scenario_versions: dict[str, str] = {}
 if args.versions:
     for entry in args.versions:
@@ -107,7 +100,6 @@ def make_env(render_mode=None):
 
 
 def make_env_masked(render_mode=None):
-    """Wrapped environment for the RL model (ActionMasker required by MaskablePPO)."""
     from sb3_contrib.common.wrappers import ActionMasker
     env = make_env(render_mode=render_mode)
     return ActionMasker(env, lambda e: e.unwrapped.action_masks())
@@ -117,7 +109,7 @@ def make_env_masked(render_mode=None):
 # Baseline helpers
 # ---------------------------------------------------------------------------
 def _masks(env) -> np.ndarray:
-    """Returns masks as (n_vehicles, 3) bool array."""
+    """Returns action masks as (n_vehicles, 3) bool array."""
     n = env.unwrapped.cfg.mdp.n_vehicles
     return env.unwrapped.action_masks().reshape(n, 3)
 
@@ -127,164 +119,209 @@ def _best_valid(mask_row: np.ndarray, preference_order=(2, 0, 1)) -> int:
     for a in preference_order:
         if mask_row[a]:
             return a
-    return int(np.argmax(mask_row))  # safety fallback
+    return int(np.argmax(mask_row))
 
 
 # ---------------------------------------------------------------------------
-# Baseline policies
-# Each function takes an env, reads fleet state, and returns an action array.
+# Baseline policies — no-ban scenarios (S1, S2)
 # ---------------------------------------------------------------------------
 
-def policy_eol_bet(env) -> np.ndarray:
-    """
-    End-of-life only: keep every vehicle until forced to replace, then choose BET.
-    """
+def policy_eol_dt(env) -> np.ndarray:
+    """Keep until forced to replace, then replace with DT."""
     n = env.unwrapped.cfg.mdp.n_vehicles
     masks = _masks(env)
     actions = np.zeros(n, dtype=np.int32)
     for i in range(n):
-        if not masks[i, 0]:                        # keep is blocked → must replace
-            actions[i] = _best_valid(masks[i])     # prefer BET
-        # else: keep (action=0, already set)
+        if not masks[i, 0]:  # keep is blocked → must replace
+            actions[i] = _best_valid(masks[i], preference_order=(1, 2, 0))
     return actions
 
 
-def policy_age_threshold_bet(env, threshold: int = 5) -> np.ndarray:
-    """
-    Replace any vehicle at or above `threshold` years old with BET, keep younger vehicles unless forced to replace.
-    """
-    fleet = env.unwrapped.fleet_state              # (n, 3): tech, age, mileage
+def policy_5yr_dt(env, threshold: int = 5) -> np.ndarray:
+    """Replace any vehicle at or above `threshold` years old with DT."""
+    fleet = env.unwrapped.fleet_state
     n = env.unwrapped.cfg.mdp.n_vehicles
     masks = _masks(env)
     actions = np.zeros(n, dtype=np.int32)
     for i in range(n):
         age = fleet[i, 1]
-        if not masks[i, 0]:                        # forced replacement
-            actions[i] = _best_valid(masks[i])
-        elif age >= threshold and masks[i, 2]:     # above threshold and BET is valid
-            actions[i] = 2
-        # else: keep
+        if not masks[i, 0]:  # forced replacement
+            actions[i] = _best_valid(masks[i], preference_order=(1, 2, 0))
+        elif age >= threshold and masks[i, 1]:  # voluntary, DT valid
+            actions[i] = 1
     return actions
 
 
-def policy_oldest_first_bet(env, k: int = 1) -> np.ndarray:
-    """
-    Each step, replace the k oldest vehicles with BET (staggered replacement).
-    Also handles forced replacements.
-    """
+def policy_greedy_dt(env) -> np.ndarray:
+    """Replace with DT whenever the mask allows it."""
+    n = env.unwrapped.cfg.mdp.n_vehicles
+    masks = _masks(env)
+    actions = np.zeros(n, dtype=np.int32)
+    for i in range(n):
+        if masks[i, 1]:        # DT valid → replace
+            actions[i] = 1
+        elif not masks[i, 0]:  # must replace but DT blocked → BET fallback
+            actions[i] = _best_valid(masks[i])
+    return actions
+
+
+# ---------------------------------------------------------------------------
+# Baseline policies — ban scenarios (SQ, S3, S4)
+# ---------------------------------------------------------------------------
+
+def policy_eol_dtbet(env) -> np.ndarray:
+    """Keep until forced: replace with DT pre-ban, BET post-ban."""
+    n = env.unwrapped.cfg.mdp.n_vehicles
+    masks = _masks(env)
+    actions = np.zeros(n, dtype=np.int32)
+    ban_step = env.unwrapped.dt_ban_step
+    step = env.unwrapped.current_step
+    for i in range(n):
+        if not masks[i, 0]:  # must replace
+            if step < ban_step and masks[i, 1]:  # pre-ban, DT available
+                actions[i] = 1
+            else:  # post-ban or DT unavailable → BET
+                actions[i] = _best_valid(masks[i])
+    return actions
+
+
+def policy_5yr_dtbet(env, threshold: int = 5) -> np.ndarray:
+    """5yr threshold: replace with DT pre-ban, BET post-ban."""
     fleet = env.unwrapped.fleet_state
     n = env.unwrapped.cfg.mdp.n_vehicles
     masks = _masks(env)
     actions = np.zeros(n, dtype=np.int32)
-
-    # Pass 1: forced replacements
+    ban_step = env.unwrapped.dt_ban_step
+    step = env.unwrapped.current_step
     for i in range(n):
-        if not masks[i, 0]:
-            actions[i] = _best_valid(masks[i])
-
-    # Pass 2: voluntarily replace k oldest among replaceable vehicles
-    ages = fleet[:, 1]
-    candidates = [
-        i for i in range(n)
-        if actions[i] == 0          # not already forced
-        and masks[i, 0]             # keep is valid (age > 1)
-        and masks[i, 2]             # BET replacement is valid
-    ]
-    candidates_sorted = sorted(candidates, key=lambda i: -ages[i])  # oldest first
-    for i in candidates_sorted[:k]:
-        actions[i] = 2
-
+        age = fleet[i, 1]
+        if not masks[i, 0]:  # forced replacement
+            if step < ban_step and masks[i, 1]:
+                actions[i] = 1
+            else:
+                actions[i] = _best_valid(masks[i])
+        elif age >= threshold:  # voluntary replacement
+            if step < ban_step and masks[i, 1]:
+                actions[i] = 1
+            elif masks[i, 2]:
+                actions[i] = 2
     return actions
 
 
-def policy_fixed_cycle_bet(env, cycle: int = 5) -> np.ndarray:
-    """
-    Replace a vehicle on a fixed cycle: vehicle i is replaced when current_step % cycle == i % cycle.
-    Spreads replacements evenly across time (round-robin by vehicle index).
-    """
-    step = env.unwrapped.current_step
+# ---------------------------------------------------------------------------
+# Baseline policies — all scenarios
+# ---------------------------------------------------------------------------
+
+def policy_eol_bet(env) -> np.ndarray:
+    """Keep until forced to replace, then replace with BET."""
     n = env.unwrapped.cfg.mdp.n_vehicles
     masks = _masks(env)
     actions = np.zeros(n, dtype=np.int32)
     for i in range(n):
-        if not masks[i, 0]:                            # forced
+        if not masks[i, 0]:  # must replace
             actions[i] = _best_valid(masks[i])
-        elif (step % cycle) == (i % cycle) and masks[i, 2] and masks[i, 0]:
-            actions[i] = 2                             # scheduled replacement
-        # else: keep
     return actions
 
 
-def policy_staggered_schedule_bet(env) -> np.ndarray:
-    """
-    Staggered schedule: pre-assigns each vehicle a target replacement step at episode start based on its current age, spreading all replacements evenly across the remaining planning horizon.
-
-    Logic:
-      - Sort vehicles by age (youngest first → replaced latest)
-      - Divide the horizon into n_vehicles equally-spaced slots
-      - Assign slot i to the i-th youngest vehicle
-      - Replace a vehicle when current_step reaches its assigned slot
-
-    Unlike fixed_cycle (which repeats forever on a fixed cadence), this schedule is computed once from the actual starting fleet state and aims for a single smooth wave of replacements across the horizon.
-    Forced replacements are respected.
-    """
-    env_unwrapped = env.unwrapped
-    fleet  = env_unwrapped.fleet_state
-    n      = env_unwrapped.cfg.mdp.n_vehicles
-    h      = env_unwrapped.cfg.mdp.planning_horizon
-    step   = env_unwrapped.current_step
-    masks  = _masks(env)
+def policy_5yr_bet(env, threshold: int = 5) -> np.ndarray:
+    """Replace any vehicle at or above `threshold` years old with BET."""
+    fleet = env.unwrapped.fleet_state
+    n = env.unwrapped.cfg.mdp.n_vehicles
+    masks = _masks(env)
     actions = np.zeros(n, dtype=np.int32)
-
-    # Build or retrieve the schedule (stored on the env so it persists per episode)
-    if not hasattr(env_unwrapped, "_stagger_schedule") or env_unwrapped._stagger_schedule is None:
-        ages = fleet[:, 1]
-        # Sort vehicle indices youngest-first; youngest gets the latest slot
-        order = np.argsort(ages)          # ascending age → latest replacement slot
-        schedule = np.empty(n, dtype=int)
-        for rank, vehicle_idx in enumerate(order):
-            schedule[vehicle_idx] = round(rank * h / n)
-        env_unwrapped._stagger_schedule = schedule
-
-    schedule = env_unwrapped._stagger_schedule
-
     for i in range(n):
-        if not masks[i, 0]:                                  # forced replacement
+        age = fleet[i, 1]
+        if not masks[i, 0]:  # forced replacement
             actions[i] = _best_valid(masks[i])
-        elif step == schedule[i] and masks[i, 2]:            # scheduled slot
+        elif age >= threshold and masks[i, 2]:
             actions[i] = 2
-        # else: keep
-
     return actions
 
 
 def policy_greedy_bet(env) -> np.ndarray:
-    """
-    Replace with BET whenever the mask allows it.
-    """
+    """Replace with BET whenever the mask allows it."""
     n = env.unwrapped.cfg.mdp.n_vehicles
     masks = _masks(env)
     actions = np.zeros(n, dtype=np.int32)
     for i in range(n):
-        if masks[i, 2]:            # BET replacement valid → do it
+        if masks[i, 2]:        # BET valid → replace
             actions[i] = 2
-        elif not masks[i, 0]:      # must replace but BET blocked → DT
+        elif not masks[i, 0]:  # must replace but BET blocked → DT
             actions[i] = _best_valid(masks[i])
-        # else: keep
     return actions
+
+
+def policy_random(env) -> np.ndarray:
+    """Sample a uniformly random valid action per vehicle (respects action masking)."""
+    n = env.unwrapped.cfg.mdp.n_vehicles
+    masks = _masks(env)
+    actions = np.zeros(n, dtype=np.int32)
+    for i in range(n):
+        valid = np.where(masks[i])[0]
+        actions[i] = int(env.unwrapped.np_random.choice(valid))
+    return actions
+
+
+def policy_cost_greedy(env) -> np.ndarray:
+    """Myopic cost-greedy: pick the action minimising current-step cost per vehicle."""
+    u = env.unwrapped
+    n = u.cfg.mdp.n_vehicles
+    masks = u.action_masks().reshape(n, 3)
+    action = np.zeros(n, dtype=np.int32)
+    n_charger_current = int(u.charger_slots.sum())  # frozen at step start, matching env.step()
+    for i in range(n):
+        tech, age, _ = u.fleet_state[i]
+        best_action, best_cost = None, float("inf")
+        for act in range(3):
+            if not masks[i, act]:
+                continue
+            cost = compute_step_cost(
+                tech=int(tech),
+                age=age,
+                action=act,
+                annual_km=u.cfg.cost.akt_base,
+                cfg=u.cfg.cost,
+                current_year=u.cfg.mdp.start_year + u.current_step,
+                has_charger=bool(u.charger_slots[i]),
+                n_charger=n_charger_current,
+            ).total
+            if cost < best_cost:
+                best_cost = cost
+                best_action = act
+        action[i] = best_action
+    return action
+
+
+# ---------------------------------------------------------------------------
+# Scenario-appropriate baseline list
+# ---------------------------------------------------------------------------
+def get_baselines(scenario_tag: str) -> list:
+    """Return ordered (name, fn, kwargs) list for the given scenario tag."""
+    common = [
+        ("EOL -> BET",    policy_eol_bet,     {}),
+        ("5yr -> BET",    policy_5yr_bet,     {}),
+        ("Greedy BET",    policy_greedy_bet,  {}),
+        ("Random",        policy_random,      {}),
+        ("Cost-Greedy",   policy_cost_greedy, {}),
+    ]
+    if scenario_tag in _NO_BAN_SCENARIOS:
+        return [
+            ("EOL -> DT",   policy_eol_dt,    {}),
+            ("5yr -> DT",   policy_5yr_dt,    {}),
+            ("Greedy DT",   policy_greedy_dt, {}),
+        ] + common
+    else:  # SQ, S3, S4 — ban scenarios
+        return [
+            ("EOL -> DT -> BET", policy_eol_dtbet, {}),
+            ("5yr -> DT -> BET", policy_5yr_dtbet, {}),
+        ] + common
 
 
 # ---------------------------------------------------------------------------
 # Episode runner (baselines)
 # ---------------------------------------------------------------------------
 def run_episode(policy_fn, env, seed=None, policy_kwargs=None, eval_steps=None) -> float:
-    """Run one episode and return total (undiscounted by RL, discounted internally) reward.
-
-    If eval_steps is set, only accumulate reward for the first eval_steps steps
-    (the episode still runs to completion so policy decisions are unaffected).
-    """
     obs, _ = env.reset(seed=seed)
-    env.unwrapped._stagger_schedule = None   # clear staggered schedule for new episode
     done = False
     total_reward = 0.0
     step = 0
@@ -316,13 +353,7 @@ def evaluate_policy(policy_fn, policy_kwargs=None, n_episodes=N_EPISODES) -> np.
 # RL evaluation
 # ---------------------------------------------------------------------------
 def evaluate_rl(n_episodes=N_EPISODES):
-    """Load the best saved MaskablePPO model and evaluate it.
-
-    The full 30-year trained policy is executed, but only the first
-    eval_steps years of costs are accumulated (to mitigate EOH effects).
-    """
     from sb3_contrib import MaskablePPO
-
     model = MaskablePPO.load(MODEL_PATH)
     env = make_env_masked()
     cfg = env.unwrapped.cfg.mdp
@@ -346,21 +377,20 @@ def evaluate_rl(n_episodes=N_EPISODES):
 
 
 # ---------------------------------------------------------------------------
-# Plot
+# Plots — same style as compare_results.py, output to baselinecomparison/
 # ---------------------------------------------------------------------------
 def plot_comparison(results: dict[str, np.ndarray]):
-    os.makedirs(f"comparison_figures/{_version}/PNG", exist_ok=True)
-    os.makedirs(f"comparison_figures/{_version}/SVG", exist_ok=True)
-    stem    = f"comparison_{_scenario_tag}{_model_suffix}"
-    png_dir = f"comparison_figures/{_version}/PNG"
-    svg_dir = f"comparison_figures/{_version}/SVG"
+    os.makedirs(f"baselinecomparison/{_version}/PNG", exist_ok=True)
+    os.makedirs(f"baselinecomparison/{_version}/SVG", exist_ok=True)
+    stem    = f"baselinecomparison_{_scenario_tag}{_model_suffix}"
+    png_dir = f"baselinecomparison/{_version}/PNG"
+    svg_dir = f"baselinecomparison/{_version}/SVG"
 
     names  = list(results.keys())
     colors = [TUM_BLUE] * len(names)
     if "RL (PPO)" in names:
         colors[names.index("RL (PPO)")] = TUM_ORANGE
 
-    # --- Box plot (broken y-axis: data panel + zero anchor) ---
     all_vals = np.concatenate([-results[n] for n in names])
     data_min, data_max = all_vals.min(), all_vals.max()
     span = data_max - data_min
@@ -385,7 +415,6 @@ def plot_comparison(results: dict[str, np.ndarray]):
     _draw_bp(ax_top)
     _draw_bp(ax_bot)
 
-    # Shared tick interval (same granularity above and below the break)
     raw_step = span / 5
     magnitude = 10 ** np.floor(np.log10(raw_step))
     tick_step = round(raw_step / magnitude) * magnitude
@@ -399,27 +428,22 @@ def plot_comparison(results: dict[str, np.ndarray]):
         ax.yaxis.set_major_formatter(millions)
         ax.yaxis.get_offset_text().set_visible(False)
 
-    # Otional: remove vertical grid lines
-    # ax_top.xaxis.grid(False)
-    # ax_bot.xaxis.grid(False)
-
-    # Hide the touching spines to create the visual break
     ax_top.spines["bottom"].set_visible(False)
     ax_bot.spines["top"].set_visible(False)
     ax_top.xaxis.tick_top()
     ax_top.tick_params(labeltop=False)
     ax_bot.xaxis.tick_bottom()
 
-    # Slanted break markers (marker-based, style-independent)
     d = 0.5
-    kwargs = dict(marker=[(-1, -d), (1, d)], markersize=12,
-                  linestyle="none", color="k", mec="k", mew=1, clip_on=False)
-    ax_top.plot([0, 1], [0, 0], transform=ax_top.transAxes, **kwargs)
-    ax_bot.plot([0, 1], [1, 1], transform=ax_bot.transAxes, **kwargs)
+    bk = dict(marker=[(-1, -d), (1, d)], markersize=12,
+               linestyle="none", color="k", mec="k", mew=1, clip_on=False)
+    ax_top.plot([0, 1], [0, 0], transform=ax_top.transAxes, **bk)
+    ax_bot.plot([0, 1], [1, 1], transform=ax_bot.transAxes, **bk)
 
     ax_top.set_ylabel("Costs (EUR millions)")
-    ax_top.set_title(f"Policy comparison — {SCENARIO_NAME}")
+    ax_top.set_title(f"Baseline comparison — {SCENARIO_NAME}")
     ax_bot.tick_params(axis="x", rotation=30)
+
     png_path = f"{png_dir}/{stem}_box.png"
     svg_path = f"{svg_dir}/{stem}_box.svg"
     fig.savefig(png_path, dpi=150)
@@ -430,19 +454,19 @@ def plot_comparison(results: dict[str, np.ndarray]):
 
 
 def plot_allbaselines_comparison(results: dict[str, np.ndarray]):
-    """2-box poster plot: all baseline rewards pooled into one box vs RL (PPO)."""
+    """2-box poster plot: all baselines pooled vs RL."""
     if "RL (PPO)" not in results:
         print("[--allbaselines] No RL results available — skipping poster plot.")
         return
 
-    os.makedirs(f"comparison_figures/final/PNG", exist_ok=True)
-    os.makedirs(f"comparison_figures/final/SVG", exist_ok=True)
-    png_dir = f"comparison_figures/final/PNG"
-    svg_dir = f"comparison_figures/final/SVG"
-    stem    = f"comparison_{_scenario_tag}{_model_suffix}"
+    os.makedirs("baselinecomparison/final/PNG", exist_ok=True)
+    os.makedirs("baselinecomparison/final/SVG", exist_ok=True)
+    png_dir = "baselinecomparison/final/PNG"
+    svg_dir = "baselinecomparison/final/SVG"
+    stem = f"baselinecomparison_{_scenario_tag}{_model_suffix}"
 
     baseline_pool = np.concatenate([-results[n] for n in results if n != "RL (PPO)"])
-    rl_vals       = -results["RL (PPO)"]
+    rl_vals = -results["RL (PPO)"]
 
     names  = ["Heuristic baselines", "RL"]
     data   = [baseline_pool, rl_vals]
@@ -513,7 +537,7 @@ def plot_allbaselines_comparison(results: dict[str, np.ndarray]):
 
 
 # ---------------------------------------------------------------------------
-# Helpers for multi-scenario evaluation (used by --allbaselinesdifference)
+# Multi-scenario helpers (--allbaselinesdifference)
 # ---------------------------------------------------------------------------
 _SHORT_LABELS = {
     "SQ": "Status Quo",
@@ -579,26 +603,26 @@ def _evaluate_rl_for(scenario_tag) -> np.ndarray | None:
     return np.array(rewards)
 
 
-def compute_difference_data(baselines_list) -> dict[str, np.ndarray]:
-    """For each scenario, compute per-episode cost savings: mean_baseline_cost − RL_cost.
-    Positive = RL is cheaper."""
+def compute_difference_data() -> dict[str, np.ndarray]:
+    """For each scenario, compute per-episode cost savings: mean_baseline_cost − RL_cost."""
     diff_data = {}
     scenarios = {t: _SCENARIO_MAP[t] for t in _scenario_versions} if _scenario_versions else _SCENARIO_MAP
     for scenario_tag, scenario_name in scenarios.items():
         ver = _scenario_versions.get(scenario_tag, _version)
         print(f"\n  Scenario: {scenario_name}  (version: {ver})")
+        baselines = get_baselines(scenario_tag)
         baseline_rewards = []
-        for name, fn, kwargs in baselines_list:
+        for name, fn, kwargs in baselines:
             r = _evaluate_policy_for(fn, scenario_name, policy_kwargs=kwargs)
             baseline_rewards.append(r)
             print(f"    {name:<22}  mean EUR {np.mean(r):>14,.0f}")
-        baseline_rewards = np.array(baseline_rewards)   # (n_baselines, n_episodes)
-        mean_baseline_cost = -np.mean(baseline_rewards, axis=0)  # (n_episodes,) in EUR
+        baseline_rewards = np.array(baseline_rewards)
+        mean_baseline_cost = -np.mean(baseline_rewards, axis=0)
 
         rl_rewards = _evaluate_rl_for(scenario_tag)
         if rl_rewards is None:
             continue
-        rl_cost = -rl_rewards  # (n_episodes,) in EUR
+        rl_cost = -rl_rewards
         print(f"    {'RL':<22}  mean EUR {np.mean(rl_rewards):>14,.0f}")
 
         diff_data[scenario_tag] = mean_baseline_cost - rl_cost  # positive = RL cheaper
@@ -607,21 +631,22 @@ def compute_difference_data(baselines_list) -> dict[str, np.ndarray]:
 
 def plot_allbaselines_difference(diff_data: dict[str, np.ndarray]):
     """Box plot: per-episode cost savings (baseline mean − RL) per scenario."""
-    out_png = "comparison_figures/final/allbaselinesdifference/PNG"
-    out_svg = "comparison_figures/final/allbaselinesdifference/SVG"
+    out_png = "baselinecomparison/final/allbaselinesdifference/PNG"
+    out_svg = "baselinecomparison/final/allbaselinesdifference/SVG"
     os.makedirs(out_png, exist_ok=True)
     os.makedirs(out_svg, exist_ok=True)
 
-    scenario_tags  = list(diff_data.keys())
+    scenario_tags = list(diff_data.keys())
     labels = [_SHORT_LABELS[t] for t in scenario_tags]
-    data   = [diff_data[t] / 1e6 for t in scenario_tags]  # EUR → EUR millions
+    data   = [diff_data[t] / 1e6 for t in scenario_tags]
 
-    suffix = "_final" if args.final else ""
-    stem = f"comparison_allscenarios{suffix}_allbaselinesdifference"
+    suffix   = "_final" if args.final else ""
+    stem     = f"baselinecomparison_allscenarios{suffix}_allbaselinesdifference"
     png_path = f"{out_png}/{stem}.png"
     svg_path = f"{out_svg}/{stem}.svg"
 
-    with plt.rc_context({"font.size": 9, "axes.labelsize": 9, "xtick.labelsize": 9, "ytick.labelsize": 9}):
+    with plt.rc_context({"font.size": 9, "axes.labelsize": 9,
+                         "xtick.labelsize": 9, "ytick.labelsize": 9}):
         fig, ax = plt.subplots(figsize=(7, 4))
         fig.subplots_adjust(left=0.12, right=0.73, top=0.95, bottom=0.22, hspace=0.2, wspace=0.2)
 
@@ -647,25 +672,10 @@ def plot_allbaselines_difference(diff_data: dict[str, np.ndarray]):
 
 
 # ---------------------------------------------------------------------------
-# All baselines to benchmark
-# ---------------------------------------------------------------------------
-BASELINES = [
-    ("EOL to BET",          policy_eol_bet,               {}),
-    ("Age>=4 to BET",       policy_age_threshold_bet,     {"threshold": 4}),
-    ("Age>=5 to BET",       policy_age_threshold_bet,     {"threshold": 5}),
-    ("Age>=6 to BET",       policy_age_threshold_bet,     {"threshold": 6}),
-    ("Age>=7 to BET",       policy_age_threshold_bet,     {"threshold": 7}),
-    ("Oldest-first k=1",    policy_oldest_first_bet,      {"k": 1}),
-    ("Oldest-first k=2",    policy_oldest_first_bet,      {"k": 2}),
-    ("Fixed cycle 5yr",     policy_fixed_cycle_bet,       {"cycle": 5}),
-    ("Fixed cycle 7yr",     policy_fixed_cycle_bet,       {"cycle": 7}),
-    ("Staggered schedule",  policy_staggered_schedule_bet, {}),
-    ("Greedy BET",          policy_greedy_bet,            {}),
-]
-
-# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+BASELINES = get_baselines(_scenario_tag)
+
 print(f"\nScenario : {SCENARIO_NAME}")
 print(f"Episodes : {N_EPISODES}  |  Base seed : {BASE_SEED}\n")
 print(f"{'Policy':<22} {'Mean (EUR)':>15} {'Std':>12} {'Best':>15} {'Worst':>15}")
@@ -707,7 +717,7 @@ else:
 # Summary
 # ---------------------------------------------------------------------------
 best_name = max(results, key=lambda k: np.mean(results[k]))
-best_mean  = np.mean(results[best_name])
+best_mean = np.mean(results[best_name])
 best_baseline_name = max(
     (k for k in results if k != "RL (PPO)"),
     key=lambda k: np.mean(results[k])
@@ -731,37 +741,6 @@ if args.allbaselines and not args.no_plot:
     plot_allbaselines_comparison(results)
 if args.allbaselinesdifference:
     print("\n--- Computing difference data across all scenarios ---")
-    diff_data = compute_difference_data(BASELINES)
+    diff_data = compute_difference_data()
     if not args.no_plot:
         plot_allbaselines_difference(diff_data)
-
-# ---------------------------------------------------------------------------
-# Optional: step-by-step trace for the best baseline and the RL model
-# ---------------------------------------------------------------------------
-if args.trace:
-    fn_map = {name: (fn, kw) for name, fn, kw in BASELINES}
-    best_fn, best_kw = fn_map[best_baseline_name]
-
-    print(f"\n{'='*60}")
-    print(f"Step-by-step trace (baseline): {best_baseline_name}  (seed={BASE_SEED})")
-    print(f"{'='*60}")
-    env = make_env(render_mode="human")
-    total_reward = run_episode(best_fn, env, seed=BASE_SEED, policy_kwargs=best_kw)
-    print(f"\nEpisode total reward: EUR {total_reward:,.0f}")
-    env.close()
-
-    if rl_model is not None:
-        print(f"\n{'='*60}")
-        print(f"Step-by-step trace (RL): PPO best_model  (seed={BASE_SEED})")
-        print(f"{'='*60}")
-        env = make_env_masked(render_mode="human")
-        obs, _ = env.reset(seed=BASE_SEED)
-        done = False
-        total_reward = 0.0
-        while not done:
-            action, _ = rl_model.predict(obs, deterministic=True, action_masks=env.action_masks())
-            obs, reward, terminated, truncated, _ = env.step(action)
-            total_reward += reward
-            done = terminated or truncated
-        print(f"\nEpisode total reward: EUR {total_reward:,.0f}")
-        env.close()
