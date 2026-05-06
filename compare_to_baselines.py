@@ -297,24 +297,27 @@ def policy_cost_greedy(env) -> np.ndarray:
 # ---------------------------------------------------------------------------
 def get_baselines(scenario_tag: str) -> list:
     """Return ordered (name, fn, kwargs) list for the given scenario tag."""
-    common = [
-        ("EOL -> BET",    policy_eol_bet,     {}),
-        ("5yr -> BET",    policy_5yr_bet,     {}),
-        ("Greedy BET",    policy_greedy_bet,  {}),
-        ("Random",        policy_random,      {}),
-        ("Cost-Greedy",   policy_cost_greedy, {}),
-    ]
     if scenario_tag in _NO_BAN_SCENARIOS:
         return [
-            ("EOL -> DT",   policy_eol_dt,    {}),
-            ("5yr -> DT",   policy_5yr_dt,    {}),
-            ("Greedy DT",   policy_greedy_dt, {}),
-        ] + common
+            ("Random",          policy_random,      {}),
+            ("EOL -> BET",      policy_eol_bet,     {}),
+            ("EOL -> DT",       policy_eol_dt,      {}),
+            ("5yr -> BET",      policy_5yr_bet,     {}),
+            ("5yr -> DT",       policy_5yr_dt,      {}),
+            ("Greedy BET",      policy_greedy_bet,  {}),
+            ("Greedy DT",       policy_greedy_dt,   {}),
+            ("Cost-Greedy",     policy_cost_greedy, {}),
+        ]
     else:  # SQ, S3, S4 — ban scenarios
         return [
-            ("EOL -> DT -> BET", policy_eol_dtbet, {}),
-            ("5yr -> DT -> BET", policy_5yr_dtbet, {}),
-        ] + common
+            ("Random",              policy_random,      {}),
+            ("EOL -> BET",          policy_eol_bet,     {}),
+            ("EOL -> DT -> BET",    policy_eol_dtbet,   {}),
+            ("5yr -> BET",          policy_5yr_bet,     {}),
+            ("5yr -> DT -> BET",    policy_5yr_dtbet,   {}),
+            ("Greedy BET",          policy_greedy_bet,  {}),
+            ("Cost-Greedy",         policy_cost_greedy, {}),
+        ]
 
 
 # ---------------------------------------------------------------------------
