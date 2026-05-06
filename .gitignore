@@ -33,3 +33,6 @@ sa/
 # Salvage comparisons (sanity check)
 salvage_comparison/
 plot_salvage_comparison.py
+
+# Old baselines
+compare_results.py
