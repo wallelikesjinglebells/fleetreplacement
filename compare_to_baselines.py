@@ -468,93 +468,93 @@ def plot_comparison(results: dict[str, np.ndarray]):
     plt.show()
 
 
-def plot_allbaselines_comparison(results: dict[str, np.ndarray]):
-    """2-box poster plot: all baselines pooled vs RL."""
-    if "RL (PPO)" not in results:
-        print("[--allbaselines] No RL results available — skipping poster plot.")
-        return
-
-    os.makedirs("baselinecomparison/final/PNG", exist_ok=True)
-    os.makedirs("baselinecomparison/final/PDF", exist_ok=True)
-    png_dir = "baselinecomparison/final/PNG"
-    pdf_dir = "baselinecomparison/final/PDF"
-    stem = f"baselinecomparison_{_scenario_tag}{_model_suffix}"
-
-    baseline_pool = np.concatenate([-results[n] for n in results if n != "RL (PPO)"])
-    rl_vals = -results["RL (PPO)"]
-
-    names  = ["Heuristic baselines", "RL"]
-    data   = [baseline_pool, rl_vals]
-    colors = [TUM_BLUE, TUM_ORANGE]
-
-    all_vals = np.concatenate([baseline_pool, rl_vals])
-    data_min, data_max = all_vals.min(), all_vals.max()
-    span = data_max - data_min
-
-    bot_range = 1.5e6
-    fig, (ax_top, ax_bot) = plt.subplots(
-        2, 1, sharex=True, figsize=(5, 10/3),
-        gridspec_kw={"height_ratios": [span * 1.15 / bot_range, 1]},
-    )
-    fig.subplots_adjust(left=0.15, right=0.54, top=0.92, bottom=0.34, hspace=0.04, wspace=0.2)
-
-    def _draw_bp(ax):
-        bp = ax.boxplot(
-            data,
-            positions=[1, 1.15],
-            widths=0.12,
-            tick_labels=names,
-            patch_artist=True,
-            medianprops={"color": "black", "linewidth": 1.5},
-        )
-        for patch, color in zip(bp["boxes"], colors):
-            patch.set_facecolor(color)
-            patch.set_edgecolor("black")
-
-    _draw_bp(ax_top)
-    _draw_bp(ax_bot)
-    ax_bot.xaxis.set_minor_locator(FixedLocator([]))
-
-    tick_step = 1e6
-
-    for ax in (ax_top, ax_bot):
-        ax.set_xlim(0.82, 1.33)
-    ax_top.set_ylim(data_min - span * 0.05, data_max + span * 0.1)
-    ax_bot.set_ylim(0, bot_range)
-
-    millions = FuncFormatter(lambda x, _: f"{x / 1e6:.0f}")
-    ax_top.yaxis.set_major_locator(MultipleLocator(tick_step))
-    ax_top.yaxis.set_major_formatter(millions)
-    ax_top.yaxis.get_offset_text().set_visible(False)
-    ax_bot.yaxis.set_major_locator(FixedLocator([1e6]))
-    ax_bot.yaxis.set_major_formatter(millions)
-    ax_bot.yaxis.get_offset_text().set_visible(False)
-
-    ax_top.spines["bottom"].set_visible(False)
-    ax_bot.spines["top"].set_visible(False)
-    ax_top.tick_params(axis="x", which="both", length=0)
-    ax_bot.xaxis.tick_bottom()
-
-    d = 0.5
-    bk = dict(marker=[(-1, -d), (1, d)], markersize=12,
-               linestyle="none", color="k", mec="k", mew=1, clip_on=False)
-    ax_top.plot([0, 1], [0, 0], transform=ax_top.transAxes, **bk)
-    ax_bot.plot([0, 1], [1, 1], transform=ax_bot.transAxes, **bk)
-
-    pos_top = ax_top.get_position()
-    pos_bot = ax_bot.get_position()
-    mid_y = (pos_bot.y0 + pos_top.y1) / 2
-    fig.text(pos_top.x0 / 2, mid_y, "Costs (EUR millions)",
-             va="center", ha="center", rotation="vertical",
-             fontsize=plt.rcParams["axes.labelsize"])
-
-    png_path = f"{png_dir}/{stem}_allbaselines_box.png"
-    pdf_path = f"{pdf_dir}/{stem}_allbaselines_box.pdf"
-    fig.savefig(png_path, dpi=150)
-    fig.savefig(pdf_path)
-    print(f"Saved: {png_path}")
-    print(f"Saved: {pdf_path}")
-    plt.show()
+# def plot_allbaselines_comparison(results: dict[str, np.ndarray]):
+#     """2-box poster plot: all baselines pooled vs RL."""
+#     if "RL (PPO)" not in results:
+#         print("[--allbaselines] No RL results available — skipping poster plot.")
+#         return
+#
+#     os.makedirs("baselinecomparison/final/PNG", exist_ok=True)
+#     os.makedirs("baselinecomparison/final/PDF", exist_ok=True)
+#     png_dir = "baselinecomparison/final/PNG"
+#     pdf_dir = "baselinecomparison/final/PDF"
+#     stem = f"baselinecomparison_{_scenario_tag}{_model_suffix}"
+#
+#     baseline_pool = np.concatenate([-results[n] for n in results if n != "RL (PPO)"])
+#     rl_vals = -results["RL (PPO)"]
+#
+#     names  = ["Heuristic baselines", "RL"]
+#     data   = [baseline_pool, rl_vals]
+#     colors = [TUM_BLUE, TUM_ORANGE]
+#
+#     all_vals = np.concatenate([baseline_pool, rl_vals])
+#     data_min, data_max = all_vals.min(), all_vals.max()
+#     span = data_max - data_min
+#
+#     bot_range = 1.5e6
+#     fig, (ax_top, ax_bot) = plt.subplots(
+#         2, 1, sharex=True, figsize=(5, 10/3),
+#         gridspec_kw={"height_ratios": [span * 1.15 / bot_range, 1]},
+#     )
+#     fig.subplots_adjust(left=0.15, right=0.54, top=0.92, bottom=0.34, hspace=0.04, wspace=0.2)
+#
+#     def _draw_bp(ax):
+#         bp = ax.boxplot(
+#             data,
+#             positions=[1, 1.15],
+#             widths=0.12,
+#             tick_labels=names,
+#             patch_artist=True,
+#             medianprops={"color": "black", "linewidth": 1.5},
+#         )
+#         for patch, color in zip(bp["boxes"], colors):
+#             patch.set_facecolor(color)
+#             patch.set_edgecolor("black")
+#
+#     _draw_bp(ax_top)
+#     _draw_bp(ax_bot)
+#     ax_bot.xaxis.set_minor_locator(FixedLocator([]))
+#
+#     tick_step = 1e6
+#
+#     for ax in (ax_top, ax_bot):
+#         ax.set_xlim(0.82, 1.33)
+#     ax_top.set_ylim(data_min - span * 0.05, data_max + span * 0.1)
+#     ax_bot.set_ylim(0, bot_range)
+#
+#     millions = FuncFormatter(lambda x, _: f"{x / 1e6:.0f}")
+#     ax_top.yaxis.set_major_locator(MultipleLocator(tick_step))
+#     ax_top.yaxis.set_major_formatter(millions)
+#     ax_top.yaxis.get_offset_text().set_visible(False)
+#     ax_bot.yaxis.set_major_locator(FixedLocator([1e6]))
+#     ax_bot.yaxis.set_major_formatter(millions)
+#     ax_bot.yaxis.get_offset_text().set_visible(False)
+#
+#     ax_top.spines["bottom"].set_visible(False)
+#     ax_bot.spines["top"].set_visible(False)
+#     ax_top.tick_params(axis="x", which="both", length=0)
+#     ax_bot.xaxis.tick_bottom()
+#
+#     d = 0.5
+#     bk = dict(marker=[(-1, -d), (1, d)], markersize=12,
+#                linestyle="none", color="k", mec="k", mew=1, clip_on=False)
+#     ax_top.plot([0, 1], [0, 0], transform=ax_top.transAxes, **bk)
+#     ax_bot.plot([0, 1], [1, 1], transform=ax_bot.transAxes, **bk)
+#
+#     pos_top = ax_top.get_position()
+#     pos_bot = ax_bot.get_position()
+#     mid_y = (pos_bot.y0 + pos_top.y1) / 2
+#     fig.text(pos_top.x0 / 2, mid_y, "Costs (EUR millions)",
+#              va="center", ha="center", rotation="vertical",
+#              fontsize=plt.rcParams["axes.labelsize"])
+#
+#     png_path = f"{png_dir}/{stem}_allbaselines_box.png"
+#     pdf_path = f"{pdf_dir}/{stem}_allbaselines_box.pdf"
+#     fig.savefig(png_path, dpi=150)
+#     fig.savefig(pdf_path)
+#     print(f"Saved: {png_path}")
+#     print(f"Saved: {pdf_path}")
+#     plt.show()
 
 
 # ---------------------------------------------------------------------------
@@ -773,8 +773,8 @@ print()
 
 if not args.no_plot:
     plot_comparison(results)
-if args.allbaselines and not args.no_plot:
-    plot_allbaselines_comparison(results)
+# if args.allbaselines and not args.no_plot:
+#     plot_allbaselines_comparison(results)
 if args.allbaselinesdifference:
     print("\n--- Computing difference data across all scenarios ---")
     diff_data = compute_difference_data()
