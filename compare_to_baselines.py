@@ -16,11 +16,16 @@ import os
 import re as _re
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.ticker import FuncFormatter, MultipleLocator
+from matplotlib.ticker import FuncFormatter, MultipleLocator, FixedLocator
 import scienceplots
 plt.style.use(["science", "nature", "grid"])
 plt.rcParams["text.usetex"] = False
 plt.rcParams["font.family"] = "Arial"
+plt.rcParams["font.size"] = 9
+plt.rcParams["axes.labelsize"] = 9
+plt.rcParams["xtick.labelsize"] = 9
+plt.rcParams["ytick.labelsize"] = 9
+plt.rcParams["legend.fontsize"] = 9
 from tum_colors import TUM_BLUE, TUM_ORANGE
 import gymnasium as gym
 import fleetreplacement_env
@@ -384,10 +389,10 @@ def evaluate_rl(n_episodes=N_EPISODES):
 # ---------------------------------------------------------------------------
 def plot_comparison(results: dict[str, np.ndarray]):
     os.makedirs(f"baselinecomparison/{_version}/PNG", exist_ok=True)
-    os.makedirs(f"baselinecomparison/{_version}/SVG", exist_ok=True)
+    os.makedirs(f"baselinecomparison/{_version}/PDF", exist_ok=True)
     stem    = f"baselinecomparison_{_scenario_tag}{_model_suffix}"
     png_dir = f"baselinecomparison/{_version}/PNG"
-    svg_dir = f"baselinecomparison/{_version}/SVG"
+    pdf_dir = f"baselinecomparison/{_version}/PDF"
 
     names  = list(results.keys())
     colors = [TUM_BLUE] * len(names)
@@ -398,16 +403,19 @@ def plot_comparison(results: dict[str, np.ndarray]):
     data_min, data_max = all_vals.min(), all_vals.max()
     span = data_max - data_min
 
+    bot_range = 1.5e6
     fig, (ax_top, ax_bot) = plt.subplots(
-        2, 1, sharex=True, figsize=(12, 6),
-        gridspec_kw={"height_ratios": [4, 1]},
+        2, 1, sharex=True, figsize=(12, 8),
+        gridspec_kw={"height_ratios": [span * 1.15 / bot_range, 1]},
     )
     fig.subplots_adjust(left=0.08, right=0.97, top=0.92, bottom=0.18, hspace=0.04)
+
+    display_names = [_LABEL_MAP.get(n, n) for n in names]
 
     def _draw_bp(ax):
         bp = ax.boxplot(
             [-results[n] for n in names],
-            tick_labels=names,
+            tick_labels=display_names,
             patch_artist=True,
             medianprops={"color": "black", "linewidth": 1.5},
         )
@@ -417,24 +425,24 @@ def plot_comparison(results: dict[str, np.ndarray]):
 
     _draw_bp(ax_top)
     _draw_bp(ax_bot)
+    ax_bot.xaxis.set_minor_locator(FixedLocator([]))
 
-    raw_step = span / 5
-    magnitude = 10 ** np.floor(np.log10(raw_step))
-    tick_step = round(raw_step / magnitude) * magnitude
+    tick_step = 1e6
 
     ax_top.set_ylim(data_min - span * 0.05, data_max + span * 0.1)
-    ax_bot.set_ylim(0, data_min * 0.12)
+    ax_bot.set_ylim(0, bot_range)
 
-    millions = FuncFormatter(lambda x, _: f"{x / 1e6:.1f}")
-    for ax in (ax_top, ax_bot):
-        ax.yaxis.set_major_locator(MultipleLocator(tick_step))
-        ax.yaxis.set_major_formatter(millions)
-        ax.yaxis.get_offset_text().set_visible(False)
+    millions = FuncFormatter(lambda x, _: f"{x / 1e6:.0f}")
+    ax_top.yaxis.set_major_locator(MultipleLocator(tick_step))
+    ax_top.yaxis.set_major_formatter(millions)
+    ax_top.yaxis.get_offset_text().set_visible(False)
+    ax_bot.yaxis.set_major_locator(FixedLocator([1e6]))
+    ax_bot.yaxis.set_major_formatter(millions)
+    ax_bot.yaxis.get_offset_text().set_visible(False)
 
     ax_top.spines["bottom"].set_visible(False)
     ax_bot.spines["top"].set_visible(False)
-    ax_top.xaxis.tick_top()
-    ax_top.tick_params(labeltop=False)
+    ax_top.tick_params(axis="x", which="both", length=0)
     ax_bot.xaxis.tick_bottom()
 
     d = 0.5
@@ -443,16 +451,20 @@ def plot_comparison(results: dict[str, np.ndarray]):
     ax_top.plot([0, 1], [0, 0], transform=ax_top.transAxes, **bk)
     ax_bot.plot([0, 1], [1, 1], transform=ax_bot.transAxes, **bk)
 
-    ax_top.set_ylabel("Costs (EUR millions)")
-    ax_top.set_title(f"Baseline comparison — {SCENARIO_NAME}")
-    ax_bot.tick_params(axis="x", rotation=30)
+    pos_top = ax_top.get_position()
+    pos_bot = ax_bot.get_position()
+    mid_y = (pos_bot.y0 + pos_top.y1) / 2
+    fig.text(pos_top.x0 / 2, mid_y, "Costs (EUR millions)",
+             va="center", ha="center", rotation="vertical",
+             fontsize=plt.rcParams["axes.labelsize"])
+    ax_bot.tick_params(axis="x", rotation=0)
 
     png_path = f"{png_dir}/{stem}_box.png"
-    svg_path = f"{svg_dir}/{stem}_box.svg"
+    pdf_path = f"{pdf_dir}/{stem}_box.pdf"
     fig.savefig(png_path, dpi=150)
-    fig.savefig(svg_path)
+    fig.savefig(pdf_path)
     print(f"Saved: {png_path}")
-    print(f"Saved: {svg_path}")
+    print(f"Saved: {pdf_path}")
     plt.show()
 
 
@@ -463,9 +475,9 @@ def plot_allbaselines_comparison(results: dict[str, np.ndarray]):
         return
 
     os.makedirs("baselinecomparison/final/PNG", exist_ok=True)
-    os.makedirs("baselinecomparison/final/SVG", exist_ok=True)
+    os.makedirs("baselinecomparison/final/PDF", exist_ok=True)
     png_dir = "baselinecomparison/final/PNG"
-    svg_dir = "baselinecomparison/final/SVG"
+    pdf_dir = "baselinecomparison/final/PDF"
     stem = f"baselinecomparison_{_scenario_tag}{_model_suffix}"
 
     baseline_pool = np.concatenate([-results[n] for n in results if n != "RL (PPO)"])
@@ -479,9 +491,10 @@ def plot_allbaselines_comparison(results: dict[str, np.ndarray]):
     data_min, data_max = all_vals.min(), all_vals.max()
     span = data_max - data_min
 
+    bot_range = 1.5e6
     fig, (ax_top, ax_bot) = plt.subplots(
-        2, 1, sharex=True, figsize=(5, 6),
-        gridspec_kw={"height_ratios": [4, 1]},
+        2, 1, sharex=True, figsize=(5, 10/3),
+        gridspec_kw={"height_ratios": [span * 1.15 / bot_range, 1]},
     )
     fig.subplots_adjust(left=0.15, right=0.54, top=0.92, bottom=0.34, hspace=0.04, wspace=0.2)
 
@@ -500,26 +513,26 @@ def plot_allbaselines_comparison(results: dict[str, np.ndarray]):
 
     _draw_bp(ax_top)
     _draw_bp(ax_bot)
+    ax_bot.xaxis.set_minor_locator(FixedLocator([]))
 
-    raw_step = span / 5
-    magnitude = 10 ** np.floor(np.log10(raw_step))
-    tick_step = round(raw_step / magnitude) * magnitude
+    tick_step = 1e6
 
     for ax in (ax_top, ax_bot):
         ax.set_xlim(0.82, 1.33)
     ax_top.set_ylim(data_min - span * 0.05, data_max + span * 0.1)
-    ax_bot.set_ylim(0, data_min * 0.12)
+    ax_bot.set_ylim(0, bot_range)
 
-    millions = FuncFormatter(lambda x, _: f"{x / 1e6:.1f}")
-    for ax in (ax_top, ax_bot):
-        ax.yaxis.set_major_locator(MultipleLocator(tick_step))
-        ax.yaxis.set_major_formatter(millions)
-        ax.yaxis.get_offset_text().set_visible(False)
+    millions = FuncFormatter(lambda x, _: f"{x / 1e6:.0f}")
+    ax_top.yaxis.set_major_locator(MultipleLocator(tick_step))
+    ax_top.yaxis.set_major_formatter(millions)
+    ax_top.yaxis.get_offset_text().set_visible(False)
+    ax_bot.yaxis.set_major_locator(FixedLocator([1e6]))
+    ax_bot.yaxis.set_major_formatter(millions)
+    ax_bot.yaxis.get_offset_text().set_visible(False)
 
     ax_top.spines["bottom"].set_visible(False)
     ax_bot.spines["top"].set_visible(False)
-    ax_top.xaxis.tick_top()
-    ax_top.tick_params(labeltop=False)
+    ax_top.tick_params(axis="x", which="both", length=0)
     ax_bot.xaxis.tick_bottom()
 
     d = 0.5
@@ -528,16 +541,38 @@ def plot_allbaselines_comparison(results: dict[str, np.ndarray]):
     ax_top.plot([0, 1], [0, 0], transform=ax_top.transAxes, **bk)
     ax_bot.plot([0, 1], [1, 1], transform=ax_bot.transAxes, **bk)
 
-    ax_top.set_ylabel("Costs (EUR millions)")
+    pos_top = ax_top.get_position()
+    pos_bot = ax_bot.get_position()
+    mid_y = (pos_bot.y0 + pos_top.y1) / 2
+    fig.text(pos_top.x0 / 2, mid_y, "Costs (EUR millions)",
+             va="center", ha="center", rotation="vertical",
+             fontsize=plt.rcParams["axes.labelsize"])
 
     png_path = f"{png_dir}/{stem}_allbaselines_box.png"
-    svg_path = f"{svg_dir}/{stem}_allbaselines_box.svg"
+    pdf_path = f"{pdf_dir}/{stem}_allbaselines_box.pdf"
     fig.savefig(png_path, dpi=150)
-    fig.savefig(svg_path)
+    fig.savefig(pdf_path)
     print(f"Saved: {png_path}")
-    print(f"Saved: {svg_path}")
+    print(f"Saved: {pdf_path}")
     plt.show()
 
+
+# ---------------------------------------------------------------------------
+# X-axis label display names
+# ---------------------------------------------------------------------------
+_LABEL_MAP = {
+    "Random":           "Random\nvalid-action",
+    "EOL -> BET":       "EOL\nBET",
+    "EOL -> DT":        "EOL\nDT",
+    "EOL -> DT -> BET": "EOL\npost-ban BET",
+    "5yr -> BET":       "5-year\nBET",
+    "5yr -> DT":        "5-year\nDT",
+    "5yr -> DT -> BET": "5-year\npost-ban BET",
+    "Greedy BET":       "Greedy\nBET",
+    "Greedy DT":        "Greedy\nDT",
+    "Cost-Greedy":      "Cost-greedy",
+    "RL (PPO)":         "RL (PPO)",
+}
 
 # ---------------------------------------------------------------------------
 # Multi-scenario helpers (--allbaselinesdifference)
@@ -635,9 +670,9 @@ def compute_difference_data() -> dict[str, np.ndarray]:
 def plot_allbaselines_difference(diff_data: dict[str, np.ndarray]):
     """Box plot: per-episode cost savings (baseline mean − RL) per scenario."""
     out_png = "baselinecomparison/final/allbaselinesdifference/PNG"
-    out_svg = "baselinecomparison/final/allbaselinesdifference/SVG"
+    out_pdf = "baselinecomparison/final/allbaselinesdifference/PDF"
     os.makedirs(out_png, exist_ok=True)
-    os.makedirs(out_svg, exist_ok=True)
+    os.makedirs(out_pdf, exist_ok=True)
 
     scenario_tags = list(diff_data.keys())
     labels = [_SHORT_LABELS[t] for t in scenario_tags]
@@ -646,31 +681,29 @@ def plot_allbaselines_difference(diff_data: dict[str, np.ndarray]):
     suffix   = "_final" if args.final else ""
     stem     = f"baselinecomparison_allscenarios{suffix}_allbaselinesdifference"
     png_path = f"{out_png}/{stem}.png"
-    svg_path = f"{out_svg}/{stem}.svg"
+    pdf_path = f"{out_pdf}/{stem}.pdf"
 
-    with plt.rc_context({"font.size": 9, "axes.labelsize": 9,
-                         "xtick.labelsize": 9, "ytick.labelsize": 9}):
-        fig, ax = plt.subplots(figsize=(7, 4))
-        fig.subplots_adjust(left=0.12, right=0.73, top=0.95, bottom=0.22, hspace=0.2, wspace=0.2)
+    fig, ax = plt.subplots(figsize=(7, 14/3))
+    fig.subplots_adjust(left=0.12, right=0.73, top=0.95, bottom=0.22, hspace=0.2, wspace=0.2)
 
-        bp = ax.boxplot(
-            data,
-            tick_labels=labels,
-            patch_artist=True,
-            medianprops={"color": "black", "linewidth": 1.5},
-        )
-        for patch in bp["boxes"]:
-            patch.set_facecolor(TUM_BLUE)
-            patch.set_edgecolor("black")
+    bp = ax.boxplot(
+        data,
+        tick_labels=labels,
+        patch_artist=True,
+        medianprops={"color": "black", "linewidth": 1.5},
+    )
+    for patch in bp["boxes"]:
+        patch.set_facecolor(TUM_BLUE)
+        patch.set_edgecolor("black")
 
-        ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
-        ax.set_ylabel("RL cost savings vs. baselines\n(EUR M, 20-year horizon)")
-        ax.tick_params(axis="x", rotation=0)
+    ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
+    ax.set_ylabel("RL cost savings vs. baselines\n(EUR M, 20-year horizon)")
+    ax.tick_params(axis="x", rotation=0)
 
-        fig.savefig(png_path, dpi=150)
-        fig.savefig(svg_path)
+    fig.savefig(png_path, dpi=150)
+    fig.savefig(pdf_path)
     print(f"\nSaved: {png_path}")
-    print(f"Saved: {svg_path}")
+    print(f"Saved: {pdf_path}")
     plt.show()
 
 
