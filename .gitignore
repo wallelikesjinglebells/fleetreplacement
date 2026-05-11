@@ -3,10 +3,10 @@ __pycache__/
 *.py[cod]
 
 # Training logs (TensorBoard event files, Monitor wrapper)
-logs/
+logs/not_final/
 
 # Trained model weights
-models/
+models/not_final/
 *.zip
 
 # For now DeepSets try
