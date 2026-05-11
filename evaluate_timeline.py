@@ -4,12 +4,14 @@ Single-episode visual evaluation of a saved MaskablePPO model.
 Loads the best saved model for a given scenario and runs one episode with human rendering so the fleet decisions can be watched step by step.
 
 Usage:
-    python evaluate.py              # Status Quo (default)
-    python evaluate.py SQ
-    python evaluate.py S1           # Scenario 1, etc.
+    python evaluate_timeline.py SQ --v0
+    python evaluate_timeline.py S1 --v1
+    python evaluate_timeline.py S1 --v2
+    python evaluate_timeline.py S1 --v2_rt1
 """
 
 import argparse
+import re as _re
 import fleetreplacement_env
 import gymnasium as gym
 from sb3_contrib import MaskablePPO
@@ -25,10 +27,18 @@ _SCENARIO_MAP = {
 
 parser = argparse.ArgumentParser()
 parser.add_argument("scenario", choices=_SCENARIO_MAP, nargs="?", default="SQ")
-args = parser.parse_args()
+args, _extra = parser.parse_known_args()
+
+# Detect --vN flag dynamically (e.g. --v0, --v1, --v2, --v2_rt1, ...)
+_version_flags = [a for a in _extra if _re.fullmatch(r"--v\d+\w*", a)]
+if len(_version_flags) == 0:
+    parser.error("A version flag is required (e.g. --v0, --v1, --v2, --v2_rt1, ...)")
+if len(_version_flags) > 1:
+    parser.error(f"Only one version flag allowed, got: {' '.join(_version_flags)}")
+_version = _version_flags[0].lstrip("-")   # "v0", "v1", "v2_rt1", ...
 
 _scenario_tag = args.scenario
-MODEL_PATH = f"./models/scenarios/ppo_fleet_{_scenario_tag}/best_model"
+MODEL_PATH = f"./models/{_version}/ppo_fleet_{_scenario_tag}/best_model"
 print(f"Scenario : {args.scenario}  |  Model : {MODEL_PATH}\n")
 
 # Load the best saved model
