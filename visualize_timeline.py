@@ -86,7 +86,7 @@ def make_env_masked():
 # ---------------------------------------------------------------------------
 # Data collection
 # ---------------------------------------------------------------------------
-def collect_action_tensor() -> tuple[np.ndarray, int]:
+def collect_action_tensor() -> tuple[np.ndarray, int, np.ndarray]:
     """
     Run N_EPISODES with the RL model.
 
@@ -97,6 +97,8 @@ def collect_action_tensor() -> tuple[np.ndarray, int]:
         Rows are sorted by ascending starting age (rank 0 = youngest at t=0).
     start_year : int
         Calendar year of step 0, for axis labels.
+    sorted_initial_ages : np.ndarray, shape (n_vehicles,)
+        Initial ages sorted youngest → oldest from the last episode.
     """
     from sb3_contrib import MaskablePPO
 
@@ -107,6 +109,7 @@ def collect_action_tensor() -> tuple[np.ndarray, int]:
     start_year = env.unwrapped.cfg.mdp.start_year
 
     tensor = np.empty((N_EPISODES, n_vehicles, n_steps), dtype=np.int32)
+    sorted_initial_ages = None
 
     for ep in range(N_EPISODES):
         obs, _ = env.reset(seed=BASE_SEED + ep)
@@ -114,6 +117,7 @@ def collect_action_tensor() -> tuple[np.ndarray, int]:
         # Age-rank: sort vehicles youngest → oldest at episode start (once per episode)
         starting_ages = env.unwrapped.fleet_state[:, 1].copy()
         age_rank = np.argsort(starting_ages)   # age_rank[0] = index of youngest vehicle
+        sorted_initial_ages = starting_ages[age_rank]
 
         actions_ep = np.empty((n_vehicles, n_steps), dtype=np.int32)
         done = False
@@ -129,12 +133,12 @@ def collect_action_tensor() -> tuple[np.ndarray, int]:
         tensor[ep] = actions_ep[age_rank, :]
 
     env.close()
-    return tensor, start_year
+    return tensor, start_year, sorted_initial_ages
 
 # ---------------------------------------------------------------------------
 # Plot
 # ---------------------------------------------------------------------------
-def plot_heatmaps(tensor: np.ndarray, start_year: int):
+def plot_heatmaps(tensor: np.ndarray, start_year: int, sorted_initial_ages: np.ndarray):
     n_vehicles = tensor.shape[1]
     n_steps    = tensor.shape[2]
 
@@ -152,38 +156,63 @@ def plot_heatmaps(tensor: np.ndarray, start_year: int):
                       else f"Rank {i}"
                       for i in range(n_vehicles)]
 
-    fig, axes = plt.subplots(1, 2, figsize=(15, 5))
-    fig.suptitle(
-        f"Replacement probability — {SCENARIO_NAME}\n"
-        f"(RL policy, {N_EPISODES} episodes, rows sorted by starting age)",
-        fontsize=12,
-    )
+    singular = (N_EPISODES == 1)
 
+    fig, axes = plt.subplots(1, 2, figsize=(15, 5))
+
+    bet_title = "BET replacement" if singular else "BET replacement probability"
+    dt_title  = "DT replacement"  if singular else "DT replacement probability"
     panels = [
-        (axes[0], bet_prob, "BET replacement probability", cmap_blue),
-        (axes[1], dt_prob,  "DT replacement probability",  cmap_orange),
+        (axes[0], bet_prob, bet_title, cmap_blue),
+        (axes[1], dt_prob,  dt_title,  cmap_orange),
     ]
-    for ax, data, title, cmap in panels:
+    fs = 16 if singular else 18
+
+    ims = []
+    for idx, (ax, data, title, cmap) in enumerate(panels):
         im = ax.imshow(data, aspect="auto", vmin=0, vmax=1, cmap=cmap, origin="upper")
-        ax.set_title(title)
-        ax.set_xlabel("Year")
-        ax.set_ylabel("Vehicle rank at episode start")
-        even_year_ticks = [t for t in range(n_steps) if (start_year + t) % 2 == 0]
-        ax.set_xticks(even_year_ticks)
-        # ax.set_xticklabels([year_labels[t] for t in even_year_ticks], rotation=45, ha="right", fontsize=8)
-        ax.set_xticklabels([year_labels[t] for t in even_year_ticks], rotation=0, ha="center", fontsize=8)     
+        ims.append(im)
+        ax.set_title(title, fontsize=fs)
+        ax.set_xlabel("Year", fontsize=fs)
+        ax.set_xticks(range(n_steps))
+        x_labels = [year_labels[t] if t % 4 == 0 else "" for t in range(n_steps)]
+        ax.set_xticklabels(x_labels, rotation=0, ha="center", fontsize=fs)
         ax.set_yticks(range(n_vehicles))
-        ax.set_yticklabels(vehicle_labels, fontsize=8)
-        plt.colorbar(im, ax=ax, label="Fraction of episodes")
+        if singular:
+            ax.set_yticklabels(sorted_initial_ages.astype(int), fontsize=fs)
+        else:
+            ax.set_yticklabels(range(1, n_vehicles + 1), fontsize=fs)
+        ax.tick_params(which="minor", bottom=False, left=False, top=False, right=False)
+        if idx == 0:
+            ylabel = "Initial vehicle age" if singular else "Vehicle rank by initial age"
+            ax.set_ylabel(ylabel, fontsize=fs)
 
     plt.tight_layout()
-    os.makedirs(f"heatmaps/{_version}/SVG", exist_ok=True)
-    os.makedirs(f"heatmaps/{_version}/PNG", exist_ok=True)
-    svg_path = f"heatmaps/{_version}/SVG/timeline_heatmap_{_scenario_tag}{_model_suffix}.svg"
-    png_path = f"heatmaps/{_version}/PNG/timeline_heatmap_{_scenario_tag}{_model_suffix}.png"
-    plt.savefig(svg_path, bbox_inches="tight")
+
+    if not singular:
+        # Place two colorbars to the right of the DT panel with the same gap as between panels
+        pos0 = axes[0].get_position()
+        pos1 = axes[1].get_position()
+        panel_gap  = pos1.x0 - pos0.x1          # gap between BET and DT panels (figure fraction)
+        cbar_width = pos1.width * 0.04
+
+        cax_bet = fig.add_axes([pos1.x1 + panel_gap, pos1.y0, cbar_width, pos1.height])
+        cax_dt  = fig.add_axes([pos1.x1 + panel_gap + cbar_width * 1.2, pos1.y0, cbar_width, pos1.height])
+        fig.colorbar(ims[0], cax=cax_bet).set_ticks([])
+        cb = fig.colorbar(ims[1], cax=cax_dt)
+        cb.set_label("Replacement rate", fontsize=fs)
+        cb.ax.tick_params(labelsize=14)
+
+    subdir = "singular" if singular else ""
+    base   = f"heatmaps/{_version}/{subdir}" if singular else f"heatmaps/{_version}"
+    os.makedirs(f"{base}/PDF", exist_ok=True)
+    os.makedirs(f"{base}/PNG", exist_ok=True)
+    _single_suffix = "_single" if singular else ""
+    pdf_path = f"{base}/PDF/timeline_heatmap_{_scenario_tag}{_model_suffix}{_single_suffix}.pdf"
+    png_path = f"{base}/PNG/timeline_heatmap_{_scenario_tag}{_model_suffix}{_single_suffix}.png"
+    plt.savefig(pdf_path, bbox_inches="tight")
     plt.savefig(png_path, dpi=150, bbox_inches="tight")
-    print(f"Saved: {svg_path}")
+    print(f"Saved: {pdf_path}")
     print(f"Saved: {png_path}")
     plt.show()
 
@@ -204,10 +233,10 @@ def _save_separate_heatmaps(bet_prob, dt_prob, year_labels, vehicle_labels,
     for data, tag, cmap in panels:
         fig, ax = plt.subplots(figsize=(8, 5))
         im = ax.imshow(data, aspect="auto", vmin=0, vmax=1, cmap=cmap, origin="upper")
-        ax.set_xlabel("Year", fontsize=14)
+        ax.set_xlabel("Year", fontsize=18)
         ax.set_xticks(range(n_steps))
         x_labels = [year_labels[t] if t % 4 == 0 else "" for t in range(n_steps)]
-        ax.set_xticklabels(x_labels, rotation=0, ha="center", fontsize=14)
+        ax.set_xticklabels(x_labels, rotation=0, ha="center", fontsize=18)
         ax.set_yticks(range(n_vehicles))
         ax.set_yticklabels([""] * n_vehicles)
         ax.tick_params(which="minor", bottom=False, left=False, top=False, right=False)
@@ -215,12 +244,14 @@ def _save_separate_heatmaps(bet_prob, dt_prob, year_labels, vehicle_labels,
         # "Age of vehicle" label + downward arrow to the left of the y-axis
         # (origin="upper" means row 0 = youngest at top, age increases downward)
         ax.text(-0.07, 0.5, "DT age at episode start", transform=ax.transAxes,
-                ha="center", va="center", fontsize=14, rotation=90)
+                ha="center", va="center", fontsize=18, rotation=90)
         ax.annotate("", xy=(-0.04, 0.02), xytext=(-0.04, 0.98),
                     xycoords="axes fraction",
                     arrowprops=dict(arrowstyle="-|>", color="black", lw=1.2),
                     annotation_clip=False)
-        plt.colorbar(im, ax=ax).set_label("Replacement rate", fontsize=14)
+        cb = plt.colorbar(im, ax=ax)
+        cb.set_label("Replacement rate", fontsize=18)
+        cb.ax.tick_params(labelsize=14)
         plt.tight_layout()
         stem = f"timeline_heatmap_{_scenario_tag}{_model_suffix}_{tag}"
         svg_path = f"heatmaps/final/SVG/{stem}.svg"
@@ -241,5 +272,5 @@ print(f"\nScenario : {SCENARIO_NAME}")
 print(f"Episodes : {N_EPISODES}  |  Base seed : {BASE_SEED}")
 print(f"Model    : {MODEL_PATH}\n")
 
-tensor, start_year = collect_action_tensor()
-plot_heatmaps(tensor, start_year)
+tensor, start_year, sorted_initial_ages = collect_action_tensor()
+plot_heatmaps(tensor, start_year, sorted_initial_ages)

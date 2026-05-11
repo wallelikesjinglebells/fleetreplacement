@@ -8,10 +8,11 @@ Usage:
     python compare_to_baselines.py S1 --v3
     python compare_to_baselines.py S1 --v2 --no-plot
     python compare_to_baselines.py S1 --v2 --allbaselines
-    python compare_to_baselines.py SQ --v2 --allbaselinesdifference --versions SQ=v2 S1=v3 S2=v2 S3=v1 S4=v3
+    python compare_to_baselines.py SQ --v2 --allbaselinesdifference --versions SQ=v3 S1=v3 S2=v3 S3=v3 S4=v3
 """
 
 import argparse
+import csv
 import os
 import re as _re
 import numpy as np
@@ -19,8 +20,14 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, MultipleLocator, FixedLocator
 import scienceplots
 plt.style.use(["science", "nature", "grid"])
-plt.rcParams["text.usetex"] = False
-plt.rcParams["font.family"] = "Arial"
+plt.rcParams["text.usetex"] = True
+plt.rcParams["font.family"] = "sans-serif"
+plt.rcParams["text.latex.preamble"] = (
+    r"\usepackage{helvet}"
+    r"\renewcommand\familydefault{\sfdefault}"
+    r"\usepackage[T1]{fontenc}"
+    r"\usepackage{eurosym}"
+)
 plt.rcParams["font.size"] = 9
 plt.rcParams["axes.labelsize"] = 9
 plt.rcParams["xtick.labelsize"] = 9
@@ -402,70 +409,84 @@ def plot_comparison(results: dict[str, np.ndarray]):
     all_vals = np.concatenate([-results[n] for n in names])
     data_min, data_max = all_vals.min(), all_vals.max()
     span = data_max - data_min
+    upper = _UPPER_YLIM.get(_scenario_tag, data_max + span * 0.1)
+    lower = data_min - span * 0.05
 
-    bot_range = 1.5e6
-    fig, (ax_top, ax_bot) = plt.subplots(
-        2, 1, sharex=True, figsize=(12, 8),
-        gridspec_kw={"height_ratios": [span * 1.15 / bot_range, 1]},
-    )
-    fig.subplots_adjust(left=0.08, right=0.97, top=0.92, bottom=0.18, hspace=0.04)
-
-    display_names = [_LABEL_MAP.get(n, n) for n in names]
-
-    def _draw_bp(ax):
-        bp = ax.boxplot(
-            [-results[n] for n in names],
-            tick_labels=display_names,
-            patch_artist=True,
-            medianprops={"color": "black", "linewidth": 1.5},
+    _fs = {"font.size": 14, "axes.labelsize": 14, "xtick.labelsize": 14, "ytick.labelsize": 14}
+    with plt.rc_context(_fs):
+        bot_range = 1.5e6
+        fig, (ax_top, ax_bot) = plt.subplots(
+            2, 1, sharex=True, figsize=(12, 8),
+            gridspec_kw={"height_ratios": [(upper - lower) / bot_range, 1]},
         )
-        for patch, color in zip(bp["boxes"], colors):
-            patch.set_facecolor(color)
-            patch.set_edgecolor("black")
+        fig.subplots_adjust(left=0.08, right=0.97, top=0.92, bottom=0.18, hspace=0.04)
 
-    _draw_bp(ax_top)
-    _draw_bp(ax_bot)
-    ax_bot.xaxis.set_minor_locator(FixedLocator([]))
+        display_names = [_LABEL_MAP.get(n, n) for n in names]
 
-    tick_step = 1e6
+        def _draw_bp(ax):
+            bp = ax.boxplot(
+                [-results[n] for n in names],
+                tick_labels=display_names,
+                patch_artist=True,
+                medianprops={"color": "black", "linewidth": 1.5},
+            )
+            for patch, color in zip(bp["boxes"], colors):
+                patch.set_facecolor(color)
+                patch.set_edgecolor("black")
 
-    ax_top.set_ylim(data_min - span * 0.05, data_max + span * 0.1)
-    ax_bot.set_ylim(0, bot_range)
+        _draw_bp(ax_top)
+        _draw_bp(ax_bot)
+        ax_bot.xaxis.set_minor_locator(FixedLocator([]))
 
-    millions = FuncFormatter(lambda x, _: f"{x / 1e6:.0f}")
-    ax_top.yaxis.set_major_locator(MultipleLocator(tick_step))
-    ax_top.yaxis.set_major_formatter(millions)
-    ax_top.yaxis.get_offset_text().set_visible(False)
-    ax_bot.yaxis.set_major_locator(FixedLocator([1e6]))
-    ax_bot.yaxis.set_major_formatter(millions)
-    ax_bot.yaxis.get_offset_text().set_visible(False)
+        tick_step = 1e6
 
-    ax_top.spines["bottom"].set_visible(False)
-    ax_bot.spines["top"].set_visible(False)
-    ax_top.tick_params(axis="x", which="both", length=0)
-    ax_bot.xaxis.tick_bottom()
+        ax_top.set_ylim(lower, upper)
+        ax_bot.set_ylim(0, bot_range)
 
-    d = 0.5
-    bk = dict(marker=[(-1, -d), (1, d)], markersize=12,
-               linestyle="none", color="k", mec="k", mew=1, clip_on=False)
-    ax_top.plot([0, 1], [0, 0], transform=ax_top.transAxes, **bk)
-    ax_bot.plot([0, 1], [1, 1], transform=ax_bot.transAxes, **bk)
+        millions = FuncFormatter(lambda x, _: f"{x / 1e6:.0f}")
+        ax_top.yaxis.set_major_locator(MultipleLocator(tick_step))
+        ax_top.yaxis.set_major_formatter(millions)
+        ax_top.yaxis.get_offset_text().set_visible(False)
+        ax_bot.yaxis.set_major_locator(FixedLocator([0, 1e6]))
+        ax_bot.yaxis.set_major_formatter(millions)
+        ax_bot.yaxis.get_offset_text().set_visible(False)
 
-    pos_top = ax_top.get_position()
-    pos_bot = ax_bot.get_position()
-    mid_y = (pos_bot.y0 + pos_top.y1) / 2
-    fig.text(pos_top.x0 / 2, mid_y, "Costs (EUR millions)",
-             va="center", ha="center", rotation="vertical",
-             fontsize=plt.rcParams["axes.labelsize"])
-    ax_bot.tick_params(axis="x", rotation=0)
+        if _scenario_tag in {"S1", "S4"}:
+            sparse = FuncFormatter(lambda x, _: f"{x / 1e6:.0f}" if int(round(x / 1e6)) % 2 == 0 else "")
+            ax_top.yaxis.set_major_formatter(sparse)
+            ax_bot.yaxis.set_major_formatter(sparse)
 
-    png_path = f"{png_dir}/{stem}_box.png"
-    pdf_path = f"{pdf_dir}/{stem}_box.pdf"
-    fig.savefig(png_path, dpi=150)
-    fig.savefig(pdf_path)
-    print(f"Saved: {png_path}")
-    print(f"Saved: {pdf_path}")
-    plt.show()
+        ax_top.spines["bottom"].set_visible(False)
+        ax_bot.spines["top"].set_visible(False)
+        ax_top.tick_params(axis="x", which="both", length=0)
+        ax_bot.xaxis.tick_bottom()
+
+        d = 0.5
+        bk = dict(marker=[(-1, -d), (1, d)], markersize=12,
+                   linestyle="none", color="k", mec="k", mew=1, clip_on=False)
+        ax_top.plot([0, 1], [0, 0], transform=ax_top.transAxes, **bk)
+        ax_bot.plot([0, 1], [1, 1], transform=ax_bot.transAxes, **bk)
+
+        pos_top = ax_top.get_position()
+        pos_bot = ax_bot.get_position()
+        mid_y = (pos_bot.y0 + pos_top.y1) / 2
+        fig.text(pos_top.x0 / 2, mid_y, r"Cost ($10^6$\,\euro)",
+                 va="center", ha="center", rotation="vertical",
+                 fontsize=plt.rcParams["axes.labelsize"])
+        ax_bot.tick_params(axis="x", rotation=0)
+
+        fig.canvas.draw()
+        for gl in ax_top.yaxis.get_gridlines():
+            if abs(gl.get_ydata()[0] - upper) < 1e3:
+                gl.set_visible(False)
+
+        png_path = f"{png_dir}/{stem}_box.png"
+        pdf_path = f"{pdf_dir}/{stem}_box.pdf"
+        fig.savefig(png_path, dpi=150)
+        fig.savefig(pdf_path)
+        print(f"Saved: {png_path}")
+        print(f"Saved: {pdf_path}")
+        plt.show()
 
 
 # def plot_allbaselines_comparison(results: dict[str, np.ndarray]):
@@ -526,7 +547,7 @@ def plot_comparison(results: dict[str, np.ndarray]):
 #     ax_top.yaxis.set_major_locator(MultipleLocator(tick_step))
 #     ax_top.yaxis.set_major_formatter(millions)
 #     ax_top.yaxis.get_offset_text().set_visible(False)
-#     ax_bot.yaxis.set_major_locator(FixedLocator([1e6]))
+#     ax_bot.yaxis.set_major_locator(FixedLocator([0, 1e6]))
 #     ax_bot.yaxis.set_major_formatter(millions)
 #     ax_bot.yaxis.get_offset_text().set_visible(False)
 #
@@ -558,16 +579,21 @@ def plot_comparison(results: dict[str, np.ndarray]):
 
 
 # ---------------------------------------------------------------------------
+# Per-scenario fixed upper y-axis limit (EUR, data units)
+# ---------------------------------------------------------------------------
+_UPPER_YLIM = {"SQ": 44e6, "S1": 60e6, "S2": 41e6, "S3": 48e6, "S4": 42e6}
+
+# ---------------------------------------------------------------------------
 # X-axis label display names
 # ---------------------------------------------------------------------------
 _LABEL_MAP = {
     "Random":           "Random\nvalid-action",
     "EOL -> BET":       "EOL\nBET",
     "EOL -> DT":        "EOL\nDT",
-    "EOL -> DT -> BET": "EOL\npost-ban BET",
+    "EOL -> DT -> BET": "EOL DT\npost-ban BET",
     "5yr -> BET":       "5-year\nBET",
     "5yr -> DT":        "5-year\nDT",
-    "5yr -> DT -> BET": "5-year\npost-ban BET",
+    "5yr -> DT -> BET": "5-year DT\npost-ban BET",
     "Greedy BET":       "Greedy\nBET",
     "Greedy DT":        "Greedy\nDT",
     "Cost-Greedy":      "Cost-greedy",
@@ -641,9 +667,10 @@ def _evaluate_rl_for(scenario_tag) -> np.ndarray | None:
     return np.array(rewards)
 
 
-def compute_difference_data() -> dict[str, np.ndarray]:
+def compute_difference_data() -> tuple[dict[str, np.ndarray], list[dict]]:
     """For each scenario, compute per-episode cost savings: mean_baseline_cost − RL_cost."""
     diff_data = {}
+    summary_rows = []
     scenarios = {t: _SCENARIO_MAP[t] for t in _scenario_versions} if _scenario_versions else _SCENARIO_MAP
     for scenario_tag, scenario_name in scenarios.items():
         ver = _scenario_versions.get(scenario_tag, _version)
@@ -654,6 +681,7 @@ def compute_difference_data() -> dict[str, np.ndarray]:
             r = _evaluate_policy_for(fn, scenario_name, policy_kwargs=kwargs)
             baseline_rewards.append(r)
             print(f"    {name:<22}  mean EUR {np.mean(r):>14,.0f}")
+            summary_rows.append({"scenario": scenario_tag, "policy": name, "mean_eur": np.mean(r)})
         baseline_rewards = np.array(baseline_rewards)
         mean_baseline_cost = -np.mean(baseline_rewards, axis=0)
 
@@ -661,10 +689,11 @@ def compute_difference_data() -> dict[str, np.ndarray]:
         if rl_rewards is None:
             continue
         rl_cost = -rl_rewards
-        print(f"    {'RL':<22}  mean EUR {np.mean(rl_rewards):>14,.0f}")
+        print(f"    {'RL (PPO)':<22}  mean EUR {np.mean(rl_rewards):>14,.0f}")
+        summary_rows.append({"scenario": scenario_tag, "policy": "RL (PPO)", "mean_eur": np.mean(rl_rewards)})
 
         diff_data[scenario_tag] = mean_baseline_cost - rl_cost  # positive = RL cheaper
-    return diff_data
+    return diff_data, summary_rows
 
 
 def plot_allbaselines_difference(diff_data: dict[str, np.ndarray]):
@@ -683,25 +712,33 @@ def plot_allbaselines_difference(diff_data: dict[str, np.ndarray]):
     png_path = f"{out_png}/{stem}.png"
     pdf_path = f"{out_pdf}/{stem}.pdf"
 
-    fig, ax = plt.subplots(figsize=(7, 14/3))
-    fig.subplots_adjust(left=0.12, right=0.73, top=0.95, bottom=0.22, hspace=0.2, wspace=0.2)
+    _fs = {"font.size": 14, "axes.labelsize": 14, "xtick.labelsize": 14, "ytick.labelsize": 14}
+    with plt.rc_context(_fs):
+        fig, ax = plt.subplots(figsize=(12, 6))
+        fig.subplots_adjust(left=0.12, right=0.73, top=0.95, bottom=0.22, hspace=0.2, wspace=0.2)
 
-    bp = ax.boxplot(
-        data,
-        tick_labels=labels,
-        patch_artist=True,
-        medianprops={"color": "black", "linewidth": 1.5},
-    )
-    for patch in bp["boxes"]:
-        patch.set_facecolor(TUM_BLUE)
-        patch.set_edgecolor("black")
+        bp = ax.boxplot(
+            data,
+            tick_labels=labels,
+            patch_artist=True,
+            medianprops={"color": "black", "linewidth": 1.5},
+        )
+        for patch in bp["boxes"]:
+            patch.set_facecolor(TUM_BLUE)
+            patch.set_edgecolor("black")
 
-    ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
-    ax.set_ylabel("RL cost savings vs. baselines\n(EUR M, 20-year horizon)")
-    ax.tick_params(axis="x", rotation=0)
+        ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
+        ax.tick_params(axis="x", rotation=0)
 
-    fig.savefig(png_path, dpi=150)
-    fig.savefig(pdf_path)
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:g}"))
+        ax.set_ylim(top=7)
+        ax.xaxis.set_major_locator(FixedLocator(range(1, len(data) + 1)))
+        ax.xaxis.set_minor_locator(FixedLocator([]))
+
+        ax.set_ylabel(r"RL cost saving over baselines ($10^6$\,\euro)")
+
+        fig.savefig(png_path, dpi=150)
+        fig.savefig(pdf_path)
     print(f"\nSaved: {png_path}")
     print(f"Saved: {pdf_path}")
     plt.show()
@@ -710,73 +747,84 @@ def plot_allbaselines_difference(diff_data: dict[str, np.ndarray]):
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
-BASELINES = get_baselines(_scenario_tag)
-
-print(f"\nScenario : {SCENARIO_NAME}")
-print(f"Episodes : {N_EPISODES}  |  Base seed : {BASE_SEED}\n")
-print(f"{'Policy':<22} {'Mean (EUR)':>15} {'Std':>12} {'Best':>15} {'Worst':>15}")
-print("-" * 82)
-
-results: dict[str, np.ndarray] = {}
-for name, fn, kwargs in BASELINES:
-    rewards = evaluate_policy(fn, policy_kwargs=kwargs)
-    results[name] = rewards
-    print(
-        f"{name:<22}"
-        f"  {np.mean(rewards):>14,.0f}"
-        f"  {np.std(rewards):>11,.0f}"
-        f"  {np.max(rewards):>14,.0f}"
-        f"  {np.min(rewards):>14,.0f}"
-    )
-
-# ---------------------------------------------------------------------------
-# RL model row
-# ---------------------------------------------------------------------------
-rl_model = None
-rl_rewards = None
-
-if os.path.exists(MODEL_PATH + ".zip"):
-    print("-" * 82)
-    rl_rewards, rl_model = evaluate_rl()
-    results["RL (PPO)"] = rl_rewards
-    print(
-        f"{'RL (PPO)':<22}"
-        f"  {np.mean(rl_rewards):>14,.0f}"
-        f"  {np.std(rl_rewards):>11,.0f}"
-        f"  {np.max(rl_rewards):>14,.0f}"
-        f"  {np.min(rl_rewards):>14,.0f}"
-    )
-else:
-    print(f"\n[RL] No model found at {MODEL_PATH}.zip — skipping RL evaluation.")
-
-# ---------------------------------------------------------------------------
-# Summary
-# ---------------------------------------------------------------------------
-best_name = max(results, key=lambda k: np.mean(results[k]))
-best_mean = np.mean(results[best_name])
-best_baseline_name = max(
-    (k for k in results if k != "RL (PPO)"),
-    key=lambda k: np.mean(results[k])
-)
-best_baseline_mean = np.mean(results[best_baseline_name])
-
-print("-" * 82)
-print(f"\nBest overall : {best_name}  (mean EUR {best_mean:,.0f})")
-print(f"Best baseline: {best_baseline_name}  (mean EUR {best_baseline_mean:,.0f})")
-if rl_rewards is not None:
-    rl_mean = np.mean(rl_rewards)
-    delta = rl_mean - best_baseline_mean
-    sign  = "+" if delta >= 0 else ""
-    print(f"RL vs best baseline: {sign}{delta:,.0f} EUR  "
-          f"({'above' if delta >= 0 else 'below'} baseline)")
-print()
-
-if not args.no_plot:
-    plot_comparison(results)
-# if args.allbaselines and not args.no_plot:
-#     plot_allbaselines_comparison(results)
 if args.allbaselinesdifference:
     print("\n--- Computing difference data across all scenarios ---")
-    diff_data = compute_difference_data()
+    diff_data, summary_rows = compute_difference_data()
+
+    out_dir = "baselinecomparison/final/allbaselinesdifference"
+    os.makedirs(out_dir, exist_ok=True)
+    suffix = "_final" if args.final else ""
+
+    summary_path = f"{out_dir}/baselinecomparison_allscenarios{suffix}_summary.csv"
+    with open(summary_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["scenario", "policy", "mean_eur"])
+        writer.writeheader()
+        writer.writerows(summary_rows)
+    print(f"Saved: {summary_path}")
+
     if not args.no_plot:
         plot_allbaselines_difference(diff_data)
+else:
+    BASELINES = get_baselines(_scenario_tag)
+
+    print(f"\nScenario : {SCENARIO_NAME}")
+    print(f"Episodes : {N_EPISODES}  |  Base seed : {BASE_SEED}\n")
+    print(f"{'Policy':<22} {'Mean (EUR)':>15} {'Std':>12} {'Best':>15} {'Worst':>15}")
+    print("-" * 82)
+
+    results: dict[str, np.ndarray] = {}
+    for name, fn, kwargs in BASELINES:
+        rewards = evaluate_policy(fn, policy_kwargs=kwargs)
+        results[name] = rewards
+        print(
+            f"{name:<22}"
+            f"  {np.mean(rewards):>14,.0f}"
+            f"  {np.std(rewards):>11,.0f}"
+            f"  {np.max(rewards):>14,.0f}"
+            f"  {np.min(rewards):>14,.0f}"
+        )
+
+    # -------------------------------------------------------------------------
+    # RL model row
+    # -------------------------------------------------------------------------
+    rl_model = None
+    rl_rewards = None
+
+    if os.path.exists(MODEL_PATH + ".zip"):
+        print("-" * 82)
+        rl_rewards, rl_model = evaluate_rl()
+        results["RL (PPO)"] = rl_rewards
+        print(
+            f"{'RL (PPO)':<22}"
+            f"  {np.mean(rl_rewards):>14,.0f}"
+            f"  {np.std(rl_rewards):>11,.0f}"
+            f"  {np.max(rl_rewards):>14,.0f}"
+            f"  {np.min(rl_rewards):>14,.0f}"
+        )
+    else:
+        print(f"\n[RL] No model found at {MODEL_PATH}.zip — skipping RL evaluation.")
+
+    # -------------------------------------------------------------------------
+    # Summary
+    # -------------------------------------------------------------------------
+    best_name = max(results, key=lambda k: np.mean(results[k]))
+    best_mean = np.mean(results[best_name])
+    best_baseline_name = max(
+        (k for k in results if k != "RL (PPO)"),
+        key=lambda k: np.mean(results[k])
+    )
+    best_baseline_mean = np.mean(results[best_baseline_name])
+
+    print("-" * 82)
+    print(f"\nBest overall : {best_name}  (mean EUR {best_mean:,.0f})")
+    print(f"Best baseline: {best_baseline_name}  (mean EUR {best_baseline_mean:,.0f})")
+    if rl_rewards is not None:
+        rl_mean = np.mean(rl_rewards)
+        delta = rl_mean - best_baseline_mean
+        sign  = "+" if delta >= 0 else ""
+        print(f"RL vs best baseline: {sign}{delta:,.0f} EUR  "
+              f"({'above' if delta >= 0 else 'below'} baseline)")
+    print()
+
+    if not args.no_plot:
+        plot_comparison(results)
